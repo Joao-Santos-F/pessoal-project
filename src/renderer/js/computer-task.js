@@ -1,8 +1,7 @@
 // /pc is an explicit task. Natural-language routing is conservative so conversation stays chat.
 export function computerTask(text) {
   const value = String(text || '').trim();
-  if (/^\/(?:obsidian|abrir|executar)(?:\s|$)/i.test(value)) return value;
-  if (/^\/pc\s+\S/i.test(value)) return value.replace(/^\/pc\s+/i, '');
+  if (value.startsWith('/')) return value;
   const plain = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (/["“”«»`]/u.test(value) || /\b(nao|nunca|not|never|don't|exemplo|example)\b/.test(plain)) return null;
   // Asking for machine information is read-only, not a command inferred from a question.

@@ -696,6 +696,22 @@ html[data-motion='reduced'] .panel__bar {
   margin: 12px 0 0;
 }
 
+.command-menu {
+  max-height: 156px;
+  overflow-y: auto;
+  margin-top: 10px;
+  background: var(--ink-2);
+  border: 1px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  text-align: left;
+}
+.command-menu[hidden] { display: none; }
+.command-menu__item { padding: 7px 9px; cursor: pointer; }
+.command-menu__item strong { display: block; color: var(--paper); }
+.command-menu__item span { display: block; color: var(--paper-3); overflow-wrap: anywhere; }
+.command-menu__item[aria-selected="true"], .command-menu__item:hover { background: oklch(0.30 0.06 300); }
+
 .panel__input {
   flex: 1;
   min-width: 0;

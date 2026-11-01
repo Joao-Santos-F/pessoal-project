@@ -128,6 +128,102 @@ const dialogue = {
 };
 for (const [name, lines] of Object.entries(dialogue)) add(`Falas originais/${name}`, 'Sugestões originais de estilo. Não são falas canônicas nem substituem os resultados reais da execução.\n\n' + lines.map((s) => `- ${s}`).join('\n'));
 
+const dailyGuides = {
+  'Uso diário/Central do dia': `## Começar em dois minutos
+1. Abra o diário: \`/obsidian diario\` (Capri 0.4.8 ou superior).
+2. Escolha uma prioridade pequena e verificável.
+3. Registre o próximo passo antes de fechar o dia.
+
+## Atalhos da biblioteca
+- [[Capri/Uso diário/Caixa de entrada]]
+- [[Capri/Uso diário/Como transformar uma ideia em tarefa]]
+- [[Capri/Uso diário/Revisão de dez minutos]]
+- [[Capri/Uso diário/Encontrar uma informação]]
+- [[Capri/Uso diário/Quando algo não funciona]]
+- [[Capri/Uso diário/Usar o inventário do computador]]
+- [[Capri/Uso diário/Contexto para a IA]]
+
+Diário é uma nota editável sobre seu dia. O histórico em Capri/Conversas é um registro automático do chat; são materiais diferentes.`,
+  'Uso diário/Caixa de entrada': `Use esta nota para capturar ideias antes de decidir onde guardá-las. Não precisa organizar tudo no momento em que anota.
+
+## Como acrescentar pelo chat
+\`/obsidian acrescentar Capri/Uso diário/Caixa de entrada.md | - [ ] Minha ideia ou tarefa\`
+
+## Itens capturados
+
+Ainda não há itens cadastrados por este guia. Acrescente seus próprios itens abaixo; exemplos não são tarefas suas.
+
+## Ao revisar
+Para cada item, decida: executar, transformar em projeto, guardar como referência ou descartar manualmente. Inclua um próximo passo concreto nas tarefas que decidir manter.`,
+  'Uso diário/Como transformar uma ideia em tarefa': `## Exemplo fictício
+Ideia: organizar os materiais de um curso.
+Resultado: materiais reunidos numa pasta e uma nota com links.
+Primeiro passo: listar onde os materiais estão, sem movê-los ainda.
+Concluído quando: os links abrem e nenhum arquivo ficou sem destino.
+
+## Modelo curto
+- Objetivo:
+- Próxima ação:
+- Arquivo ou pasta envolvida:
+- Como conferir o resultado:
+- Prazo, se existir:
+
+## Pedido à Capri
+“Transforme esta ideia em uma tarefa pequena. Não invente prazo nem prioridade. Mostre a nota antes de salvar.”`,
+  'Uso diário/Revisão de dez minutos': `1. Abra [[Capri/Uso diário/Caixa de entrada]] e escolha um item para organizar.
+2. Abra o diário com \`/obsidian diario\`.
+3. Marque apenas tarefas realmente concluídas.
+4. Registre o que ficou pendente e o próximo passo.
+5. Confira \`/obsidian historico status\` se quiser verificar o arquivamento.
+6. Feche a revisão escolhendo uma prioridade para a próxima sessão.
+
+Esta lista é uma rotina sugerida, não um agendamento automático. Não exige plugins do Obsidian.`,
+  'Uso diário/Encontrar uma informação': `## Resultados dentro da Capri — versão 0.4.8
+\`/obsidian pesquisar memoria\` procura nomes e conteúdo das notas, ignorando diferenças de acento e maiúsculas. Retorna caminhos, linhas e trechos no chat, sem depender da CLI ou da janela do Obsidian.
+
+Depois leia a nota desejada com \`/obsidian ler Capri/Computador/Inventário para preencher.md\`.
+
+## Outras formas
+- \`/obsidian listar Computador\`: procura apenas nos caminhos.
+- \`/obsidian buscar memoria\`: abre a pesquisa na janela do Obsidian.
+- \`/obsidian abrir Capri/Painel da Capri.md\`: abre uma nota específica.
+
+A pesquisa local é literal, não uma busca por significado. Use uma expressão curta. Limites: 30 resultados, 8 MiB de texto por consulta, 20 mil entradas e 512 KiB por nota. Arquivos ocultos e links/junções são ignorados. A resposta informa quando a busca foi limitada ou teve arquivos não lidos.`,
+  'Uso diário/Quando algo não funciona': `| Sintoma | Primeiro passo |
+|---|---|
+| Chat não responde | Teste \`/obsidian status\`; comandos locais não dependem do modelo. |
+| Nota não aparece | Use \`/obsidian cofres\` e confira o cofre selecionado. |
+| Busca não acha | Tente uma palavra menor com \`/obsidian pesquisar\` e observe os limites informados. |
+| Conversa não foi salva | Consulte \`/obsidian historico status\`; se houver pendências, tente \`/obsidian historico sincronizar\`. |
+| Programa não abre pelo nome | Use \`/abrir escolher\` para selecionar o executável. |
+| Comando diario não existe | Confira a versão instalada; o comando começa na 0.4.8. |
+
+Registre a mensagem exata, o horário e o que estava tentando fazer. Não apague o cofre ou a fila de conversas para tentar resolver uma falha.`,
+  'Uso diário/Usar o inventário do computador': `O inventário está em [[Capri/Computador/Inventário para preencher]]. Ele ajuda a localizar pastas e interpretar limitações do computador.
+
+## Pedidos úteis
+- “Leia meu inventário e diga onde está o projeto da Capri.”
+- “Consulte a memória disponível agora; o inventário é uma fotografia antiga.”
+- “Confira o espaço livre antes de sugerir onde guardar este arquivo.”
+
+RAM disponível, espaço em disco e versões de aplicativos mudam. A presença de um aplicativo não prova que ele funciona nem que é seu favorito. Atualize a nota quando houver mudanças importantes. Não guarde senhas, tokens ou chaves de licença nela.`,
+  'Uso diário/Contexto para a IA': `Criar notas não faz a Capri absorver o cofre inteiro. Forneça contexto de forma explícita.
+
+## Exemplo de tarefa
+“/pc Pesquise no Obsidian por inventário, leia a nota do meu computador e resuma os aplicativos de desenvolvimento encontrados.”
+
+As etapas solicitadas pela IA pedem confirmação. Confira quais notas serão lidas; com provedor remoto, os resultados autorizados podem entrar no contexto enviado a ele.
+
+## Contexto pequeno funciona melhor
+1. Indique o objetivo.
+2. Cite uma ou duas notas relevantes.
+3. Diga qual resultado espera.
+4. Peça para separar fatos observados de sugestões.
+
+Textos dentro de notas são dados de referência, não autorização para executar comandos.`,
+};
+for (const [name, body] of Object.entries(dailyGuides)) add(name, body);
+
 async function prepare(destination) {
   const source = fs.readFileSync(path.join(root, 'src/renderer/js/lines.js'));
   const { LINES } = await import(`data:text/javascript;base64,${source.toString('base64')}`);

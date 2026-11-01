@@ -10,6 +10,7 @@ const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { app, shell } = require('electron');
 const { powershell } = require('./apps');
+const discovery = require('./application-discovery');
 
 const WIN = process.platform === 'win32';
 // not things to open from a chat: uninstallers, help pages and the like
@@ -32,7 +33,7 @@ async function launchables({ refresh = false } = {}) {
   const items = [];
   const seen = new Set();
   const add = (item) => {
-    const key = words(item.name).join(' ');
+    const key = `${item.kind}:${String(item.id).toLowerCase()}`;
     if (!key || seen.has(key) || SKIP.test(item.name)) return;
     seen.add(key);
     items.push(item);
@@ -41,7 +42,9 @@ async function launchables({ refresh = false } = {}) {
   for (const game of [...steamGames(await steamRoot()), ...epicGames()]) add(game);
   // the Start menu's list is slow the first time (PowerShell starting cold): main.js asks for it early
   const out = await powershell('Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress', 45000).catch(() => null);
-  for (const { Name, AppID } of [].concat(out ? JSON.parse(out) : [])) {
+  let startApps = [];
+  try { startApps = [].concat(out ? JSON.parse(out) : []); } catch { /* keep other discovery sources available */ }
+  for (const { Name, AppID } of startApps) {
     if (Name && AppID && !/^https?:/i.test(AppID)) add({ name: Name, kind: 'app', id: AppID });
   }
   // Registered executables not necessarily represented in the Start menu.
@@ -52,6 +55,7 @@ async function launchables({ refresh = false } = {}) {
     const file = String(entry.path || '').replace(/^"|"$/g, '');
     if (/\.exe$/i.test(file) && path.isAbsolute(file) && fs.existsSync(file)) add({ name: String(entry.name).replace(/\.exe$/i, ''), kind: 'executable', id: file });
   }
+  for (const item of await discovery.scan(discovery.defaultRoots())) add(item);
   if (out !== null) cache = { at: Date.now(), items }; // a list that failed isn't kept: next time, again
   return items;
 }
@@ -191,6 +195,13 @@ async function find(text) {
   return match([...desktopItems(), ...(await launchables())], text) || knownFolder(text);
 }
 
+async function findCandidates(text) {
+  let items = discovery.candidates([...desktopItems(), ...await launchables()], text);
+  if (!items.length) items = discovery.candidates([...desktopItems(), ...await launchables({ refresh: true })], text);
+  if (!items.length) { const folder = knownFolder(text); if (folder) items = [folder]; }
+  return items;
+}
+
 // Opens one of them (only something she listed herself): a Start menu app through its AppsFolder
 // entry (desktop and Store apps alike), a game through its launcher's link, a file or folder from
 // your desktop, a folder by what it is.
@@ -315,4 +326,4 @@ async function site(address) {
   return true;
 }
 
-module.exports = { launchables, match, find, launch, media, music, youtube, roblox, site, siteUrl, risky };
+module.exports = { launchables, match, find, findCandidates, launch, media, music, youtube, roblox, site, siteUrl, risky };

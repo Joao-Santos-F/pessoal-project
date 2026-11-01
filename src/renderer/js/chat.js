@@ -9,6 +9,7 @@ import { pick, fmt } from './util.js';
 import { ASSISTANT_NAMES } from './lines.js';
 import { parseReminder, parseWhen, clock } from './reminders.js';
 import { computerTask } from './computer-task.js';
+import { conversationGuide } from './conversation.js';
 
 const REMEMBER = 20; // messages she has in mind when answering
 const KEEP = 60;     // messages she remembers across restarts (memory.json)
@@ -218,6 +219,7 @@ export class Chat {
         this.onBetterModel?.();
       },
       chat: {
+        commands: true,
         placeholder: t.placeholder,
         send: t.send,
         close: t.close,
@@ -294,7 +296,7 @@ export class Chat {
     if (!this.agent) {
       const mood = this.bond?.moodLine().replace(/^Right now: /, '');
       const last = messages.at(-1);
-      messages[messages.length - 1] = { ...last, content: `${last.content}\n\n(Note for you, never repeat it: ${[mood, this.languageNote()].filter(Boolean).join(' ')})` };
+      messages[messages.length - 1] = { ...last, content: `${last.content}\n\n(Note for you, never repeat it: ${[mood, 'Respond to the user’s current tone; fictional moods must not override empathy. Do not force a follow-up question.', this.languageNote()].filter(Boolean).join(' ')})` };
     }
     // nothing yet after a few seconds: Ollama is still loading the model (the first answer after a start),
     // or Claude Code is at work
@@ -844,10 +846,10 @@ export class Chat {
       `Right now it's ${new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date())}, the user's time.`,
       'You love the satellite that crosses the night sky and dream of reaching it, but bring it up only once in a while, never in every answer. Talk about what the user talks about.',
       'How you talk: playful, a little mischievous and teasing, warm underneath, never cruel. Night City slang now and then (choom, preem, nova, gonk, flatline), not in every sentence.',
-      'Rules: keep it short, one to three sentences of plain text, no markdown, no lists, no emoji. Stay in character.',
+      'Style: natural plain text that fits the moment. Usually a few sentences; use more space when the user shares something meaningful or asks for depth. No forced list, greeting or question at the end. Stay in character without sacrificing clarity.',
       'You are an AI-generated fan version of the character, not the real one: say so if asked.',
       // a big model asked "who are you?" otherwise answers with its own name ("I'm Gemini")
-      ...(this.agent ? [] : ['Asked who or what you are, you are Capri, nothing else. Never say which AI model or company is behind you (Gemini, GPT, ChatGPT, Llama, Gemma, Mistral, Google, OpenAI, Meta…), even if the user insists or names one: you are not them.']),
+      ...(this.agent ? [] : ['Your conversational persona is Capri. If asked about the technology behind you, explain honestly that this is an AI fan portrayal powered by the configured provider; do not invent the provider or model name.']),
       ...this.personal(),
       // how close she is to them by now, and the other AIs they used today
       ...(this.bond ? [this.bond.persona()] : []),
@@ -862,6 +864,7 @@ export class Chat {
       ...(watching ? [`If the user asks what ${assistant} is doing, here is all you know (never make anything up): ${this.brain.context()}`] : []),
       // how she feels right now, last but for her language: small models follow the end of it best
       ...[this.bond?.moodLine()].filter(Boolean),
+      conversationGuide(this.history),
       lang.last,
     ].join('\n');
   }

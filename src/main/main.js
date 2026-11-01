@@ -29,6 +29,7 @@ const launch = require('./launch');
 const files = require('./files');
 const computer = require('./computer');
 const obsidian = require('./obsidian');
+const commands = require('../shared/commands');
 const { ChatArchive } = require('./chat-archive');
 const obsidianAppData = () => process.env.CAPRI_OBSIDIAN_APPDATA || app.getPath('appData');
 let chatArchive;
@@ -788,6 +789,14 @@ function registerIpc() {
         if (computerBusy) throw new Error('Já existe uma tarefa de computador em andamento.');
         computerBusy = true;
         try {
+          computerTask = commands.normalize(computerTask);
+          if (/^\/ajuda(?:\s|$)/.test(computerTask)) return { ok: true, text: commands.help() };
+          if (/^\/pc(?:\s|$)/.test(computerTask)) {
+            computerTask = computerTask.replace(/^\/pc\s*/, '');
+            if (!computerTask) return { ok: true, text: 'Use /pc seguido de um pedido.\n' + commands.help() };
+          } else if (computerTask.startsWith('/') && !/^\/(obsidian|abrir|executar)(?:\s|$)/.test(computerTask)) {
+            return { ok: false, error: 'Comando não reconhecido.\n' + commands.help() };
+          }
           const archiveCommand = /^\/obsidian\s+historico(?:\s+(status|ativar|pausar|sincronizar))?$/i.exec(computerTask.trim());
           if (archiveCommand) {
             const action = (archiveCommand[1] || 'status').toLowerCase();
@@ -809,8 +818,18 @@ function registerIpc() {
           if (obsidianResult !== null) return { ok: true, text: obsidianResult };
           const directResult = await direct.handle(computerTask, {
             launch, shell, approve: approveLocal, execute: computer.runScript, signal: abort.signal,
-            chooseFile: async () => {
-              const result = await dialog.showOpenDialog(overlay, { title: 'Escolher aplicativo ou arquivo', properties: ['openFile'] });
+            aliases: config.load().appAliases || {},
+            rememberApp: (name, file) => config.save({ appAliases: Object.fromEntries([...Object.entries(config.load().appAliases || {}).filter(([key]) => key !== name), [name, file]].slice(-100)) }),
+            chooseApp: async (items) => {
+              const choices = items.slice(0, 8);
+              const result = await dialog.showMessageBox(overlay, { type: 'question', title: 'Capri — escolher aplicativo',
+                message: 'Encontrei mais de uma opção. Qual você quer abrir?',
+                detail: choices.map((item, i) => `${i + 1}. ${item.name}\n${item.id}`).join('\n\n') + (items.length > 8 ? '\n\nHá outras opções; use um nome mais específico se necessário.' : ''),
+                buttons: ['Cancelar', ...choices.map((item, i) => `${i + 1}. ${item.name}`)], defaultId: 0, cancelId: 0, noLink: true });
+              return result.response > 0 ? choices[result.response - 1] : null;
+            },
+            chooseFile: async (missing) => {
+              const result = await dialog.showOpenDialog(overlay, { title: missing ? `Não encontrado: ${missing}. Escolha o executável; a Capri lembrará esse nome.` : 'Escolher aplicativo ou arquivo', properties: ['openFile'] });
               return result.canceled ? null : result.filePaths[0];
             },
           });

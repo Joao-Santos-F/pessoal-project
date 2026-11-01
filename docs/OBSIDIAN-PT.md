@@ -1,8 +1,8 @@
-# Capri 0.4.7: aplicativos, comandos e Obsidian
+# Capri 0.4.10: aplicativos, comandos e Obsidian
 
 ## Instalar a Capri
 
-Gere o instalador com `npm run dist -- --publish never`, conforme o [README](../README.md). Feche a Capri anterior e execute `dist/Capri-Setup-0.4.7.exe`.
+Gere o instalador com `npm run dist -- --publish never`, conforme o [README](../README.md). Feche a Capri anterior e execute `dist/Capri-Setup-0.4.10.exe`.
 
 ## Abrir aplicativos e executar comandos
 
@@ -38,6 +38,8 @@ Comandos no chat da Capri:
 /obsidian ler Capri/Minha primeira nota.md
 /obsidian abrir Capri/Minha primeira nota.md
 /obsidian buscar projetos
+/obsidian pesquisar projetos
+/obsidian diario
 ```
 
 `listar` filtra pelo caminho/nome, limitado a 100 resultados. `buscar` abre a pesquisa do próprio Obsidian. Criação nunca sobrescreve uma nota existente. Acréscimo mantém o conteúdo anterior. Arquivos ocultos, configuração do cofre, caminhos externos e links/junções não são acessados pela integração de notas. Leituras têm limites de tamanho. Não há exclusão de notas por esses comandos.
@@ -65,6 +67,34 @@ Se quiser conferir pelo PowerShell, com o Obsidian aberto:
 ```
 
 Não substitua o ID por um comando inventado. A disponibilidade e os efeitos dependem do Obsidian e dos plugins instalados.
+
+## Pesquisa no chat e diário (0.4.8)
+
+`/obsidian pesquisar termo` retorna caminhos, linhas e trechos das notas no chat. Não precisa da CLI nem do Obsidian aberto. A busca é literal, ignorando acentos e maiúsculas; `/obsidian buscar termo` continua abrindo a busca na janela do Obsidian. A pesquisa local limita a leitura a 8 MiB, 20 mil entradas e 30 resultados, ignorando notas acima de 512 KiB e informando limites e arquivos não lidos.
+
+`/obsidian diario` cria, após confirmação, uma nota em `Capri/Diário/AAAA-MM/AAAA-MM-DD.md`, usando a data local. Também aceita uma data explícita: `/obsidian diario 2026-11-01`. Se a nota já existe, apenas solicita sua abertura; não substitui o conteúdo. O diário é separado do histórico automático das conversas.
+
+Execute novamente `node scripts/prepare-capri-vault.cjs` para adicionar oito guias de uso diário à biblioteca. O gerador preserva notas existentes, inclusive o painel; em cofres já preparados, abra `Capri/Uso diário/Central do dia.md` para acessar os novos guias.
+
+## Guia de comandos e idiomas
+
+Digite `/` no início da mensagem para abrir a lista. Continue digitando para filtrar; `/obsidian ` mostra os subcomandos e `/obsidian history ` mostra as opções de histórico. Use **↑/↓** para navegar, **Tab ou Enter** para completar, **Esc** para fechar ou clique numa opção. Selecionar apenas preenche o campo; envie a mensagem para executar.
+
+Os comandos têm aliases em português, inglês, espanhol, francês, russo, alemão, italiano, chinês e japonês, independentes do idioma da interface. São palavras cadastradas, não tradução automática de qualquer idioma. Argumentos como nomes de arquivos, textos e scripts não são traduzidos.
+
+| Português | Inglês | Função |
+|---|---|---|
+| `/ajuda` | `/help` | Guia de comandos |
+| `/abrir Spotify` | `/open Spotify` | Abrir aplicativo |
+| `/executar Get-Date` | `/run Get-Date` | PowerShell com confirmação |
+| `/obsidian abrir Pasta/Nota.md` | `/obsidian open Pasta/Nota.md` | Abrir nota |
+| `/obsidian ler Pasta/Nota.md` | `/obsidian read Pasta/Nota.md` | Ler nota |
+| `/obsidian pesquisar termo` | `/obsidian find termo` | Pesquisa no chat |
+| `/obsidian buscar termo` | `/obsidian search termo` | Pesquisa na janela do Obsidian |
+| `/obsidian diario` | `/obsidian daily` | Diário |
+| `/obsidian historico ativar` | `/obsidian history enable` | Ativar arquivamento |
+
+Exemplos adicionais: `/obsidian lire Pasta/Nota.md`, `/obsidian leer Pasta/Nota.md`, `/obsidian читать Pasta/Nota.md`. A lista mostra descrições em português e inglês; `/help` apresenta o guia. Novos aliases podem ser adicionados em `src/shared/commands.js`.
 
 ## Referências oficiais
 

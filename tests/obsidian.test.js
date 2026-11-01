@@ -6,6 +6,43 @@ const os = require('node:os');
 const path = require('node:path');
 const obsidian = require('../src/main/obsidian');
 const direct = require('../src/main/direct');
+const commands = require('../src/shared/commands');
+
+test('all registered command aliases normalize without translating arguments', () => {
+  for (const [canonical, aliases] of Object.entries(commands.roots)) {
+    for (const alias of aliases) assert.equal(commands.normalize(`/${alias} Meu Texto`), `/${canonical} Meu Texto`);
+  }
+  for (const [canonical, aliases] of Object.entries(commands.actions)) {
+    for (const alias of aliases) assert.equal(commands.normalize(`/obsidian ${alias} Pasta/Open.md | Don't translate`), `/obsidian ${canonical} Pasta/Open.md | Don't translate`);
+  }
+  for (const [canonical, aliases] of Object.entries(commands.history)) {
+    for (const alias of aliases) assert.equal(commands.normalize(`/obsidian history ${alias}`), `/obsidian historico ${canonical}`);
+  }
+  assert.equal(commands.normalize('/RUN Write-Output "open créer abrir"'), '/executar Write-Output "open créer abrir"');
+  assert.equal(commands.normalize('/open choose'), '/abrir escolher');
+  assert.equal(commands.normalize('/unknown argument'), '/unknown argument');
+});
+
+test('completion guides command levels, aliases and stops at literal arguments', () => {
+  assert.equal(commands.suggestions('/').length, 5);
+  assert.equal(commands.suggestions('/obsidian op')[0].label, '/obsidian open');
+  assert.equal(commands.suggestions('/obsidian history ').length, 4);
+  assert.equal(commands.suggestions('/obsidian history en')[0].value, '/obsidian history enable ');
+  assert.equal(commands.suggestions('/obsidian open Folder').length, 0);
+  assert.equal(commands.suggestions('/run Write-Output /').length, 0);
+  assert.equal(commands.suggestions('example /obsidian').length, 0);
+  assert.match(commands.help(), /Open note/);
+});
+
+test('translated Obsidian commands create, read and open the same literal note path', async t => {
+  const f = fixture(t); let opened;
+  f.options.openExternal = async uri => { opened = new URL(uri).searchParams.get('file'); };
+  await obsidian.handle('/obsidian create Notes/open.md | Original text', f.options);
+  assert.equal(await obsidian.handle('/obsidian lire Notes/open.md', f.options), 'Original text\n');
+  await obsidian.handle('/obsidian open Notes/open.md', f.options);
+  assert.equal(opened, 'Notes/open.md');
+  assert.match(await obsidian.handle('/obsidian find original', f.options), /Original text/);
+});
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-obsidian-'));
@@ -90,4 +127,61 @@ test('any selected executable path can open after confirmation', async (t) => {
   options.approve = async () => true;
   await direct.handle(`/abrir "${file}"`, options);
   assert.equal(opened, file);
+});
+
+test('local search returns content and filename matches regardless of accents', async (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.vault, 'Rotina.md'), '# Rotina\nRevisão do computador');
+  fs.writeFileSync(path.join(f.vault, 'Memória.md'), 'Dados da RAM');
+  f.options.openExternal = async () => { throw new Error('Search must stay local'); };
+  assert.match(await obsidian.handle('/obsidian pesquisar REVISAO', f.options), /Rotina.md \(linha 2\)\nRevisão/);
+  assert.match(await obsidian.handle('/obsidian pesquisar memoria', f.options), /Memória.md/);
+  await assert.rejects(obsidian.handle('/obsidian pesquisar', f.options), /termo de pesquisa/);
+  assert.match(await obsidian.handle('/obsidian pesquisar inexistente', f.options), /Nenhuma correspondência/);
+});
+
+test('local search skips hidden notes, junctions and oversized files and bounds results', (t) => {
+  const f = fixture(t), vault = { path: f.vault };
+  fs.writeFileSync(path.join(f.vault, '.obsidian', 'private.md'), 'segredo');
+  const outside = path.join(f.root, 'outside'); fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, 'private.md'), 'segredo');
+  fs.symlinkSync(outside, path.join(f.vault, 'junction'), 'junction');
+  fs.writeFileSync(path.join(f.vault, 'large.md'), 'segredo'.repeat(80000));
+  const empty = obsidian.searchNotes(vault, 'segredo');
+  assert.equal(empty.matches.length, 0);
+  assert.equal(empty.skipped, 1);
+  for (let i = 0; i < 35; i++) fs.writeFileSync(path.join(f.vault, `${i}.md`), 'correspondência');
+  const result = obsidian.searchNotes(vault, 'correspondencia');
+  assert.equal(result.matches.length, 30);
+  assert.equal(result.limited, true);
+});
+
+test('daily note validates dates and uses local calendar date', () => {
+  assert.equal(obsidian.dailyPath('', new Date(2026, 10, 1, 23, 59)), 'Capri/Diário/2026-11/2026-11-01.md');
+  assert.equal(obsidian.dailyPath('2028-02-29'), 'Capri/Diário/2028-02/2028-02-29.md');
+  for (const value of ['2026-02-29', '2026-13-01', '../escape', '2026-2-1']) assert.throws(() => obsidian.dailyPath(value), /data válida/);
+});
+
+test('daily notes require approval and never overwrite existing user text', async (t) => {
+  const f = fixture(t), relative = obsidian.dailyPath('2026-11-01');
+  let uri;
+  f.options.openExternal = async value => { uri = value; };
+  f.options.approve = async () => false;
+  assert.match(await obsidian.handle('/obsidian diario 2026-11-01', f.options), /cancelada/);
+  assert.equal(fs.existsSync(path.join(f.vault, relative)), false);
+  f.options.approve = async () => true;
+  assert.match(await obsidian.handle('/obsidian diario 2026-11-01', f.options), /criado/);
+  assert.equal(new URL(uri).searchParams.get('file'), relative);
+  fs.writeFileSync(path.join(f.vault, relative), 'Meu texto');
+  f.options.approve = async () => { throw new Error('Existing note needs no creation approval'); };
+  assert.match(await obsidian.handle('/obsidian diário 2026-11-01', f.options), /existente/);
+  assert.equal(fs.readFileSync(path.join(f.vault, relative), 'utf8'), 'Meu texto');
+});
+
+test('daily note survives a concurrent creation and reports failed opening accurately', async (t) => {
+  const f = fixture(t), file = path.join(f.vault, obsidian.dailyPath('2026-11-02'));
+  f.options.approve = async () => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'Outra edição'); return true; };
+  f.options.openExternal = async () => { throw new Error('No URI handler'); };
+  assert.match(await obsidian.handle('/obsidian diario 2026-11-02', f.options), /existente.*\nNão foi possível/s);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'Outra edição');
 });

@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
+const commands = require('../shared/commands');
 
 const HELP = `Obsidian — comandos locais:
 /obsidian status
@@ -11,6 +12,8 @@ const HELP = `Obsidian — comandos locais:
 /obsidian ler Pasta/Nota.md
 /obsidian abrir Pasta/Nota.md
 /obsidian buscar termo
+/obsidian pesquisar termo (resultados no chat)
+/obsidian diario [AAAA-MM-DD]
 /obsidian criar Pasta/Nota.md | conteúdo
 /obsidian acrescentar Pasta/Nota.md | conteúdo
 /obsidian comandos [filtro]
@@ -81,6 +84,57 @@ function listNotes(vault, query = '') {
   return { files: found.sort(), limited: limited || pending.length > 0 };
 }
 
+function normalizeSearch(value) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// Bound disk reads and results so a large vault cannot monopolize the main process.
+function searchNotes(vault, query) {
+  const term = normalizeSearch(String(query || '').trim());
+  if (!term || term.length > 200) throw new Error('Informe um termo de pesquisa entre 1 e 200 caracteres.');
+  const matches = [], pending = [vault.path];
+  let visited = 0, bytes = 0, limited = false, skipped = 0;
+  outer: while (pending.length) {
+    const folder = pending.pop();
+    let entries;
+    try { entries = fs.readdirSync(folder, { withFileTypes: true }); }
+    catch { skipped++; continue; }
+    for (const entry of entries) {
+      if (++visited > 20000) { limited = true; break outer; }
+      if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+      const full = path.join(folder, entry.name);
+      if (entry.isDirectory()) { pending.push(full); continue; }
+      if (!entry.isFile() || !/\.md$/i.test(entry.name)) continue;
+      const relative = path.relative(vault.path, full).replace(/\\/g, '/');
+      try {
+        const file = notePath(vault, relative);
+        const size = fs.statSync(file).size;
+        if (size > 512 * 1024) { skipped++; continue; }
+        if (bytes + size > 8 * 1024 * 1024) { limited = true; break outer; }
+        bytes += size;
+        const content = fs.readFileSync(file, 'utf8');
+        const lines = content.split(/\r?\n/);
+        const index = lines.findIndex(line => normalizeSearch(line).includes(term));
+        if (index >= 0 || normalizeSearch(relative).includes(term)) {
+          matches.push({ path: relative, line: index >= 0 ? index + 1 : null,
+            excerpt: index >= 0 ? lines[index].trim().slice(0, 240) : '(Correspondência no nome da nota)' });
+          if (matches.length >= 30) { limited = true; break outer; }
+        }
+      } catch { skipped++; }
+    }
+  }
+  return { matches: matches.sort((a, b) => a.path.localeCompare(b.path)), limited, skipped };
+}
+
+function dailyPath(input = '', now = new Date()) {
+  const date = input || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error('Use uma data válida no formato AAAA-MM-DD, ou omita a data para usar hoje.');
+  }
+  return `Capri/Diário/${date.slice(0, 7)}/${date}.md`;
+}
+
 function cliPath() {
   const candidates = [
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Obsidian', 'Obsidian.com'),
@@ -104,18 +158,46 @@ function cli(file, args, signal) {
 }
 
 async function handle(text, { appData, selected, saveSelection, openExternal, approve, signal, runCli = cli }) {
-  const parsed = /^\/obsidian(?:\s+(\S+))?(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  const parsed = /^\/obsidian(?:\s+(\S+))?(?:\s+([\s\S]*))?$/i.exec(commands.normalize(text));
   if (!parsed) return null;
   const action = (parsed[1] || 'ajuda').toLowerCase(), arg = (parsed[2] || '').trim();
   const check = () => { if (signal?.aborted) throw new Error('Tarefa cancelada.'); };
   check();
-  if (['ajuda', 'help'].includes(action)) return HELP;
+  if (['ajuda', 'help'].includes(action)) return commands.help();
   const items = vaults(appData);
   if (action === 'cofres') return items.map((v) => `${v.name} — ${v.id}\n${v.path}`).join('\n\n') || 'Nenhum cofre encontrado. Abra seu cofre no Obsidian primeiro.';
   const vault = selectVault(items, action === 'usar' ? arg : selected);
   if (action === 'usar') { if (!arg) throw new Error('Informe o ID ou nome do cofre.'); saveSelection(vault.id); return `Cofre selecionado: ${vault.name}`; }
   if (action === 'status') return `Cofre: ${vault.name}\nPasta: ${vault.path}\nCLI: ${cliPath() || 'não encontrada'}\nNotas locais disponíveis. Para testar a CLI use /obsidian comandos.`;
   if (action === 'listar') { const result = listNotes(vault, arg); return `${result.files.join('\n') || 'Nenhuma nota encontrada.'}${result.limited ? '\nLista limitada; refine o termo.' : ''}`; }
+  if (action === 'pesquisar') {
+    const result = searchNotes(vault, arg);
+    return [result.matches.map(m => `${m.path}${m.line ? ` (linha ${m.line})` : ''}\n${m.excerpt}`).join('\n\n') || 'Nenhuma correspondência encontrada.',
+      result.limited ? 'Pesquisa limitada; refine o termo. Limites: 30 resultados, 8 MiB de texto e 20 mil entradas.' : '',
+      result.skipped ? `${result.skipped} arquivo(s)/pasta(s) não lidos (indisponíveis ou notas maiores que 512 KiB).` : ''].filter(Boolean).join('\n\n');
+  }
+  if (action === 'diario' || action === 'diário') {
+    const relative = dailyPath(arg);
+    let file = notePath(vault, relative, true);
+    let created = false;
+    if (!fs.existsSync(file)) {
+      const date = path.basename(relative, '.md');
+      const content = `# Diário — ${date}\n\n[[Capri/Painel da Capri|Painel da Capri]]\n\n## Prioridades\n\n- [ ] Escolher a prioridade do dia\n\n## Anotações\n\n## Concluído\n\n## Próximo passo\n\n`;
+      if (!(await approve(`Criar diário em ${vault.name}`, `${relative}\n\n${content}`))) return 'Operação cancelada.';
+      check();
+      file = notePath(vault, relative, true);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      try { fs.writeFileSync(file, content, { encoding: 'utf8', flag: 'wx' }); created = true; }
+      catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
+    check();
+    file = notePath(vault, relative);
+    if (!fs.statSync(file).isFile()) throw new Error('O caminho do diário não é um arquivo.');
+    const params = new URLSearchParams({ vault: vault.id, file: relative });
+    try { await openExternal(`obsidian://open?${params}`); }
+    catch { return `Diário ${created ? 'criado' : 'existente'}: ${relative}\nNão foi possível abri-lo automaticamente. Abra a nota pelo Obsidian.`; }
+    return `Diário ${created ? 'criado' : 'existente'}: ${relative}\nSolicitação de abertura enviada ao Obsidian.`;
+  }
   if (action === 'ler') {
     const file = notePath(vault, arg);
     if (!fs.statSync(file).isFile() || fs.statSync(file).size > 128 * 1024) throw new Error('A leitura aceita notas de até 128 KiB.');
@@ -161,4 +243,4 @@ async function handle(text, { appData, selected, saveSelection, openExternal, ap
   throw new Error(HELP);
 }
 
-module.exports = { vaults, selectVault, notePath, listNotes, cliPath, cli, handle, HELP };
+module.exports = { vaults, selectVault, notePath, listNotes, searchNotes, dailyPath, cliPath, cli, handle, HELP };

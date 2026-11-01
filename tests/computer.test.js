@@ -80,7 +80,7 @@ test('routing keeps examples and negations in ordinary chat', async () => {
   const { computerTask } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
   for (const text of ['não abra a calculadora', 'abra a calculadora', 'como criar uma pasta?', 'um exemplo: abra a calculadora', 'Olá']) assert.equal(computerTask(text), null);
   for (const text of ['abra a calculadora e calcule 2+2', 'calcule (2+3)*4', 'qual a memória do meu computador?', 'crie uma pasta de teste']) assert.equal(computerTask(text), text);
-  assert.equal(computerTask('/pc liste meus programas'), 'liste meus programas');
+  assert.equal(computerTask('/pc liste meus programas'), '/pc liste meus programas');
   for (const text of ['/obsidian ajuda', '/abrir escolher', '/executar Write-Output 42']) assert.equal(computerTask(text), text);
 });
 test('real PowerShell output and errors, without changing user files', { skip: process.platform !== 'win32' }, async () => {

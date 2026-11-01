@@ -1,6 +1,25 @@
 # Capri — versão pessoal com automação e Obsidian
 
-Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão desta adaptação: **0.4.7**.
+Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão atual: **0.4.10**, disponível como código-fonte e instalador para Windows.
+
+## Novidades da versão 0.4.10
+
+Este release reúne as melhorias desenvolvidas nas versões 0.4.8, 0.4.9 e 0.4.10 desde o último release público, 0.4.7.
+
+| Área | O que mudou |
+|---|---|
+| Abertura de aplicativos | `/open` procura também no PATH, em atalhos e em pastas comuns de instalação. Nomes ambíguos oferecem escolha; programas não encontrados podem ser selecionados manualmente, com o caminho lembrado para pedidos futuros. |
+| Comandos em outros idiomas | Aliases em nove idiomas, incluindo `/open`, `/run`, `/help`, `/obsidian open`, `/obsidian read` e `/obsidian daily`. Os argumentos não são traduzidos. |
+| Guia no chat | Digitar `/` mostra sugestões com descrições e exemplos. Setas navegam, Tab ou Enter completam e Esc fecha. Selecionar não executa o comando. |
+| Pesquisa no Obsidian | `/obsidian pesquisar` ou `/obsidian find` devolve caminhos e trechos no chat, ignorando diferenças de acento e maiúsculas. |
+| Diário | `/obsidian diario` ou `/obsidian daily` cria ou abre a nota da data local, preservando conteúdo existente. |
+| Biblioteca do cofre | O gerador passou de 104 para 112 notas, com oito guias de uso diário, caixa de entrada, organização, pesquisa e solução de problemas. |
+| Conversa e personalidade | Respostas com ritmo mais flexível, continuidade do assunto e atenção a desabafos, conquistas e correções sobre o tom emocional, sem obrigar uma pergunta a cada resposta. |
+| Confiabilidade | 60 testes automatizados aprovados (48 testes Node e 12 regressões), além da verificação do menu e do executável com perfil isolado. |
+
+**Para atualizar:** feche a Capri e execute o [instalador 0.4.10](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.10/Capri-Setup-0.4.10.exe). Para adicionar os oito guias a um cofre já preparado, execute `node scripts/prepare-capri-vault.cjs` pelo código-fonte, conforme a seção de biblioteca; notas existentes são preservadas. A atualização do instalador, por si só, não recria sua biblioteca.
+
+A conversa continua dependendo do modelo configurado: a Capri interpreta o texto, não conhece sentimentos ocultos. A descoberta de programas tem limites; o seletor de executável e o caminho completo atendem aos casos fora do catálogo. Veja os detalhes nas seções abaixo.
 
 **Esta versão foi programada inteiramente a partir do repositório [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop), utilizando o Codex na implementação das adaptações, revisões, documentação e testes, sob orientação de João Santos.**
 
@@ -38,7 +57,8 @@ Não é apenas um script: é um aplicativo Electron. A janela desenha a Capri so
 | Informações do PC | Consulta CPU, RAM, GPU, discos, pastas e programas; consultas básicas são locais. |
 | Cálculos | Avalia expressões aritméticas localmente, sem executar código arbitrário como expressão. |
 | Obsidian | Lista, lê, cria, acrescenta e abre notas; utiliza a CLI oficial para comandos internos quando habilitada. |
-| Biblioteca | Um script adiciona 104 notas com guias, modelos, rotinas, 56 objetos/conceitos, 477 textos do aplicativo e 40 sugestões de falas. |
+| Biblioteca | Um script adiciona 112 notas com guias, modelos, rotinas, central do dia, 56 objetos/conceitos, 477 textos do aplicativo e 40 sugestões de falas. |
+| Pesquisa local e diário | A partir da 0.4.8, pesquisa títulos e conteúdo no chat e cria ou abre notas diárias sem sobrescrever o texto existente. |
 | Histórico automático | Salva o texto do chat da Capri, inclusive resultados locais e erros, em notas Markdown no cofre. |
 
 A execução de ações internas depende de CLI, API ou controles acessíveis do aplicativo. Não há garantia de controle universal de qualquer interface, e tarefas em linguagem natural dependem da qualidade do modelo.
@@ -55,7 +75,7 @@ Os comandos locais `/abrir`, `/executar` e `/obsidian` podem funcionar sem model
 
 ## Instalação rápida no Windows
 
-**[Baixar Capri-Setup-0.4.7.exe](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.7/Capri-Setup-0.4.7.exe)** · [Último release](https://github.com/Joao-Santos-F/pessoal-project/releases/latest)
+**[Baixar Capri-Setup-0.4.10.exe](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.10/Capri-Setup-0.4.10.exe)** · [Último release](https://github.com/Joao-Santos-F/pessoal-project/releases/latest)
 
 1. Baixe o instalador acima, para Windows 10/11 de 64 bits.
 2. Feche a Capri caso esteja aberta e execute o `.exe`.
@@ -94,13 +114,47 @@ Depois de instalar as dependências:
 npm run dist -- --publish never
 ```
 
-O resultado fica em `dist/Capri-Setup-0.4.7.exe`, com a versão descompactada em `dist/win-unpacked/Capri.exe`.
+O resultado fica em `dist/Capri-Setup-0.4.10.exe`, com a versão descompactada em `dist/win-unpacked/Capri.exe`.
 
 1. Feche a Capri que estiver em execução.
-2. Execute `Capri-Setup-0.4.7.exe`.
+2. Execute `Capri-Setup-0.4.10.exe`.
 3. Abra a Capri pelo atalho criado.
 
 A instalação é por usuário. O projeto não configura certificado de assinatura. Para usar um instalador já gerado, não é necessário instalar Node.js. Os executáveis ficam nos [assets dos releases](https://github.com/Joao-Santos-F/pessoal-project/releases), fora do histórico Git; você também pode gerá-los pelo comando acima. `--publish never` impede publicação automática pelo electron-builder.
+
+## Guia de comandos e idiomas
+
+Digite `/` no início da mensagem para abrir a lista. Continue digitando para filtrar; `/obsidian ` mostra os subcomandos e `/obsidian history ` mostra as opções de histórico. Use **↑/↓** para navegar, **Tab ou Enter** para completar, **Esc** para fechar ou clique numa opção. Selecionar apenas preenche o campo; envie a mensagem para executar.
+
+Os comandos têm aliases em português, inglês, espanhol, francês, russo, alemão, italiano, chinês e japonês, independentes do idioma da interface. São palavras cadastradas, não tradução automática de qualquer idioma. Argumentos como nomes de arquivos, textos e scripts não são traduzidos.
+
+| Português | Inglês | Função |
+|---|---|---|
+| `/ajuda` | `/help` | Guia de comandos |
+| `/abrir Spotify` | `/open Spotify` | Abrir aplicativo |
+| `/executar Get-Date` | `/run Get-Date` | PowerShell com confirmação |
+| `/obsidian abrir Pasta/Nota.md` | `/obsidian open Pasta/Nota.md` | Abrir nota |
+| `/obsidian ler Pasta/Nota.md` | `/obsidian read Pasta/Nota.md` | Ler nota |
+| `/obsidian pesquisar termo` | `/obsidian find termo` | Pesquisa no chat |
+| `/obsidian buscar termo` | `/obsidian search termo` | Pesquisa na janela do Obsidian |
+| `/obsidian diario` | `/obsidian daily` | Diário |
+| `/obsidian historico ativar` | `/obsidian history enable` | Ativar arquivamento |
+
+Exemplos adicionais: `/obsidian lire Pasta/Nota.md`, `/obsidian leer Pasta/Nota.md`, `/obsidian читать Pasta/Nota.md`. A lista mostra descrições em português e inglês; `/help` apresenta o guia. Novos aliases podem ser adicionados em `src/shared/commands.js`.
+
+## Abrir aplicativos e conversar (0.4.10)
+
+`/open NOME` e `/abrir NOME` procuram no menu Iniciar, nos aplicativos registrados, nos jogos Steam/Epic, em atalhos, no PATH e em pastas comuns de instalação. A busca adicional é limitada a 16 mil entradas, com profundidade limitada e sem seguir junções. Não varre todos os discos.
+
+Se houver mais de uma opção, a Capri mostra nomes e destinos para você escolher. Se não encontrar, abre um seletor: indique o executável. Depois de uma abertura bem-sucedida, o nome escolhido fica associado ao caminho no perfil local, para os próximos pedidos. Você também pode usar `/open "C:\Pasta\Programa.exe"` ou `/open choose`. Um executável movido ou removido precisará ser selecionado novamente. São lembrados até 100 nomes; atalhos e executáveis ainda respeitam as confirmações de execução.
+
+Isso não garante que todo programa possa iniciar: permissões do Windows, arquivos ausentes e problemas do próprio aplicativo continuam valendo. A resposta “abertura solicitada” não afirma que a janela carregou corretamente.
+
+A conversa usa o diálogo recente para manter o assunto, variar o ritmo e interpretar o tom. A personalidade continua brincalhona, curiosa e calorosa, com gírias ocasionais. A Capri pode acolher um desabafo, celebrar uma conquista e ajustar o tom quando você corrige sua interpretação, sem exigir uma pergunta em toda resposta.
+
+É uma interpretação de fã com IA, não uma reprodução garantida da personagem original nem leitura de sentimentos. As emoções são hipóteses baseadas no texto; não são gravadas como um perfil emocional. Não há reconhecimento emocional por câmera ou microfone. A qualidade da conversa depende do modelo configurado, e modelos pequenos podem repetir frases ou fazer perguntas em excesso. O histórico de chat continua seguindo suas configurações de arquivamento.
+
+Exemplos: “Só quero desabafar, sem conselhos agora”, “Não estou triste, estou com raiva”, “Vamos continuar de onde paramos”. Esses pedidos orientam o diálogo; não acionam tarefas do computador por conta própria.
 
 ## Configurar a IA
 
@@ -160,6 +214,9 @@ As operações Markdown não exigem plugins, servidor adicional ou chave de API.
 /obsidian abrir Capri/Ideias.md
 /obsidian listar Ideias
 /obsidian buscar planejamento
+/obsidian pesquisar memoria
+/obsidian diario
+/obsidian diario 2026-11-01
 ```
 
 A criação não sobrescreve uma nota existente. Acréscimos preservam o conteúdo anterior. A integração rejeita caminhos fora do cofre, pastas ocultas e links/junções. Leituras e listagens têm limites de tamanho.
@@ -235,7 +292,7 @@ Esses scripts configuram hooks nos arquivos do assistente escolhido. A ponte loc
 npm test
 ```
 
-A versão 0.4.7 inclui 34 testes Node e 12 verificações de regressão. No Windows, alguns testes iniciam subprocessos reais e usam diretórios temporários. Durante o desenvolvimento também foram verificados o pacote Electron, o executável e o arquivamento em cofre isolado. Isso não garante compatibilidade com toda máquina ou aplicativo.
+A versão 0.4.10 inclui 48 testes Node e 12 verificações de regressão. No Windows, alguns testes iniciam subprocessos reais e usam diretórios temporários. Durante o desenvolvimento também foram verificados o pacote Electron, o executável e o arquivamento em cofre isolado. Isso não garante compatibilidade com toda máquina ou aplicativo.
 
 ```text
 src/main/       IA, Windows, arquivos, Obsidian e histórico

@@ -1,6 +1,7 @@
 // The transmission panel next to Capri, and the one-line ticker she wears while Claude works.
 
 import { clamp, ease, reducedMotion } from './util.js';
+import { CommandMenu } from './command-menu.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 
@@ -63,6 +64,7 @@ export class Panel {
     this.chatInput = panel.querySelector('.panel__input');
     this.chatSend = panel.querySelector('.panel__send');
     this.chatClose = panel.querySelector('.panel__close');
+    this.commandMenu = new CommandMenu(this.chatInput, this.chatForm);
     this.note = panel.querySelector('.panel__note');
     this.chatForm.addEventListener('click', (e) => e.stopPropagation());
     this.chatForm.addEventListener('submit', (e) => {
@@ -70,10 +72,11 @@ export class Panel {
       const text = this.chatInput.value.trim();
       if (!text || this.chatInput.disabled) return;
       this.chatInput.value = '';
+      this.commandMenu.close();
       this.current?.onSend?.(text);
     });
     this.chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.hide();
+      if (e.key === 'Escape' && !e.defaultPrevented) this.hide();
     });
     this.chatClose.addEventListener('click', () => this.hide());
 
@@ -275,6 +278,8 @@ export class Panel {
   }
 
   renderChat(chat) {
+    this.commandMenu.enabled = !!chat?.commands;
+    this.commandMenu.close();
     this.el.classList.toggle('is-chat', Boolean(chat));
     this.line.classList.remove('is-streaming');
     this.chatForm.hidden = !chat;
@@ -368,6 +373,7 @@ export class Panel {
 
   // While she answers you can't send another.
   setChatBusy(busy) {
+    if (busy) this.commandMenu.close();
     this.chatInput.disabled = busy;
     this.chatSend.disabled = busy;
     if (!busy && this.current?.chat) this.chatInput.focus();
