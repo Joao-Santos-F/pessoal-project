@@ -208,7 +208,7 @@ fan d'elle, et le panneau du chat le dit à chaque fois.
   es, même rangée) avec **C'est fait** et **Dans 10 min**. Si elle était éteinte à ce moment-là, elle t'en parle en
   revenant. Son menu › **Rappels** les liste, et chacun s'annule de là.
 
-Rien d'autre : elle ne lit pas tes fichiers, et ne voit ton écran que si tu le lui demandes (« regarde mon écran »,
+La recherche peut consulter le contenu des documents via l'index local de Windows. Elle ne voit ton écran que si tu le lui demandes (« regarde mon écran »,
 « tu vois quoi ? » dans son chat : elle regarde et te répond là, en gardant votre conversation en tête).
 
 **Elle regarde ton écran**, si tu veux. Son menu › **Regarde mon écran** : elle pose ses yeux sur la fenêtre qui est
@@ -302,7 +302,7 @@ s'endort. Tu peux juste la laisser là.
 
 ### Depuis le code (macOS, Linux, développeurs)
 
-Il faut [Node.js](https://nodejs.org) 20 ou plus.
+Il faut [Node.js](https://nodejs.org) 22.12.0 ou plus.
 
 ```bash
 git clone https://github.com/mochiiwuff/capri-desktop.git
@@ -335,7 +335,7 @@ Clic droit sur elle › **Surveiller** › **Codex** ou **Antigravity**. Elle te
 pour Claude Code. Ensuite :
 
 - **Codex** : relance-le et autorise ses hooks quand il te le demande. Ils vont dans `~/.codex/hooks.json`. Son hook
-  pour Codex a besoin de [Node.js](https://nodejs.org) 20 ou plus dans ton PATH.
+  pour Codex a besoin de [Node.js](https://nodejs.org) 22.12.0 ou plus dans ton PATH.
 - **Antigravity** : lance une nouvelle conversation. Ses hooks vont dans `~/.gemini/config/hooks.json`.
 
 Elle en suit un seul à la fois, celui choisi dans son menu, et ses répliques, son guide et son chat prennent son nom.
@@ -387,7 +387,7 @@ avec ces noms (`.mp3`, `.wav`, `.ogg` ou `.m4a`) :
 ## C'est sûr ?
 
 - Tout le code est ici. L'installeur est fabriqué à partir de lui avec `npm run dist` ; tu peux fabriquer le tien.
-- Rien ne quitte ton PC (voir plus bas) : elle ne parle à Claude Code que par un hook sur `127.0.0.1`.
+- Les hooks transmettent leurs événements à `127.0.0.1`. Le chat, les modèles cloud, les images analysées et les recherches web peuvent envoyer des données à des services externes.
 - Ce qu'elle change sur ton système : le hook dans `~/.claude/settings.json` (une sauvegarde est faite avant, et tu peux
   le retirer depuis son menu), et une entrée au démarrage seulement si tu coches « Lancer au démarrage ». Elle se
   désinstalle comme n'importe quelle app, depuis Paramètres Windows › Applications.
@@ -417,7 +417,9 @@ avec ces noms (`.mp3`, `.wav`, `.ogg` ou `.m4a`) :
 
 ## Ce qui part de ta machine
 
-Rien. Le hook ne garde que ce qui sert à l'affichage (nom de l'outil, chemin du fichier, commande lancée,
+Avec un service de chat en ligne, les messages, l'historique et le contexte du prompt (préférences, souvenirs et résumés d'activité) partent chez ce service. Les recherches web, musicales et de jeux transmettent leurs termes aux services correspondants. Les téléchargements contactent l'hébergeur du modèle. Les hooks locaux sont indépendants de ces fonctions réseau. Un changement de service, de modèle ou d'adresse personnalisée suspend l'observation automatique et demande une nouvelle permission pour l'écran.
+
+Le hook ne garde que ce qui sert à l'affichage (nom de l'outil, chemin du fichier, commande lancée,
 début de ton prompt, dernier message de Claude jusqu'à 6 000 caractères pour pouvoir te l'afficher, le tout tronqué)
 et l'envoie à `127.0.0.1` uniquement.
 Le contenu de tes fichiers n'est jamais transmis : pour une écriture, seule sa taille passe.

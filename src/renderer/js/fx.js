@@ -522,7 +522,7 @@ export class FxLayer {
 
   // Everything gone at once (her window is going to another screen: none of it belongs there).
   clear() {
-    for (const it of this.items) it.done?.();
+    for (const it of this.items) { it.land?.(); it.done?.(); }
     this.items = [];
   }
 
@@ -826,7 +826,7 @@ export class FxLayer {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.items = this.items.filter((it) => {
       const alive = now - it.born < it.life;
-      if (!alive) it.done?.();
+      if (!alive) { it.land?.(); it.done?.(); }
       return alive;
     });
     for (const it of this.items) this.draw(it, (now - it.born) / it.life, dt, now);

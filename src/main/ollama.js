@@ -82,7 +82,7 @@ function warm(model) {
 }
 
 // Her answer, streamed: onDelta(piece) as it comes, resolves with all of it.
-async function chat({ model, messages }, onDelta, signal) {
+async function chat({ model, messages, json = false }, onDelta, signal) {
   // cloud models think before they answer, and that counts in num_predict: kept short, with room for it
   const thinks = isCloud(model) && known.get(model)?.thinking;
   const res = await fetch(`${base()}/api/chat`, {
@@ -92,9 +92,10 @@ async function chat({ model, messages }, onDelta, signal) {
       model,
       messages,
       stream: true,
+      ...(json && { format: 'json' }),
       keep_alive: '15m', // she stays loaded while you chat
       ...(thinks && { think: 'low' }),
-      options: { temperature: 0.85, num_predict: thinks ? 1200 : 240 },
+      options: { temperature: json ? 0.1 : 0.85, num_predict: json ? 1800 : thinks ? 1200 : 240 },
     }),
     signal,
   });

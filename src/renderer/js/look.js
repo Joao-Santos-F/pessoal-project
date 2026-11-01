@@ -63,8 +63,8 @@ export class Look {
       yes = id === 'yes';
     });
     if (yes) {
-      this.asked = true;
-      await this.host.setConfig({ lookAsked: true, ...(auto && { watchScreen: true }) });
+      const cfg = await this.host.setConfig({ lookAsked: true, lookConsent: where.consent, ...(auto && { watchScreen: true }) });
+      yes = this.asked = Boolean(cfg.lookAsked);
     }
     return yes;
   }

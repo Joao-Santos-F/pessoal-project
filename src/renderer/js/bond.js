@@ -224,6 +224,7 @@ export class Jealousy {
   }
 
   tick() {
+    if (!this.enabled) { this.front = null; return; }
     const now = Date.now();
     const f = this.front;
     for (const k of Object.keys(this.lately)) if (k !== f?.key) this.lately[k] *= 0.9989; // about half every 10 min

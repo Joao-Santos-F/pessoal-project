@@ -20,6 +20,7 @@ function startWindowWatch({ overlay, onUpdate }) {
 
   let child = null;
   let stopped = false;
+  let restartTimer = null;
   let restarts = 0;
   let last = null; // the helper's last snapshot: it only speaks when something changes
 
@@ -46,6 +47,7 @@ function startWindowWatch({ overlay, onUpdate }) {
   };
 
   const start = () => {
+    if (stopped) return;
     child = spawn('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', SCRIPT, String(self), String(process.pid),
@@ -60,9 +62,10 @@ function startWindowWatch({ overlay, onUpdate }) {
       send();
     });
     child.stderr.on('data', (d) => console.error('[capri] window watch:', String(d).trim()));
+    child.on('error', (err) => console.error('[capri] window watch:', err.message));
     child.on('exit', () => {
       child = null;
-      if (!stopped && restarts++ < 3) setTimeout(start, 3000);
+      if (!stopped && restarts++ < 3) restartTimer = setTimeout(start, 3000);
     });
   };
 
@@ -70,6 +73,7 @@ function startWindowWatch({ overlay, onUpdate }) {
   return {
     stop() {
       stopped = true;
+      clearTimeout(restartTimer);
       child?.kill();
     },
     // her window moved (another screen, the taskbar in it or not): the same windows, from there

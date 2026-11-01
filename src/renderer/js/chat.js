@@ -8,6 +8,7 @@
 import { pick, fmt } from './util.js';
 import { ASSISTANT_NAMES } from './lines.js';
 import { parseReminder, parseWhen, clock } from './reminders.js';
+import { computerTask } from './computer-task.js';
 
 const REMEMBER = 20; // messages she has in mind when answering
 const KEEP = 60;     // messages she remembers across restarts (memory.json)
@@ -30,7 +31,7 @@ const CLOSE_ASK = /\b(close|shut|quit|kill|exit)|ferm|quitt|coupe|arr[êe]t|cier
 // her other tags: [[open: Spotify]], [[music: Bad Bunny]], [[media: next]], [[site: youtube.com]]
 const TAG = /\[\[\s*(open|music|media|site)\s*:\s*([^\]]*)\]\]/i;
 // "open", "launch", "ouvre", "lance", "abre", "открой"... in any of her languages
-const OPEN_ASK = /\b(open|launch|start|run)\b|ouvr|lance|démarre|abre|abrir|inicia|ejecuta|executa|открой|запусти/i;
+const OPEN_ASK = /\b(open|launch|start|run)\b|ouvr|lance|démarre|abr[ae]|abrir|inicia|ejecuta|executa|открой|запусти/i;
 // what to do with the music playing, said plainly (only when it's about music, or said in a few words)
 const MEDIA_ASK = [
   ['pause', /\b(pause|pausa|pausar)\b|stop (the )?music|arrête la musique|пауз/i],
@@ -170,6 +171,9 @@ export class Chat {
     this.onMessage = null; // () => void: you said something to her
     this.waitingWhen = null; // a reminder you asked for without saying when: { text, until }
     host.onChatDelta(({ id, text }) => this.onDelta(id, text));
+    host.onComputerProgress?.(({ id, text }) => {
+      if (this.turn === id && this.open) this.panel.stream(text);
+    });
   }
 
   get t() {
@@ -188,37 +192,12 @@ export class Chat {
     }
     capri.wake();
     const status = await host.chatStatus();
-    if (!status.ok && this.onSetup) {
-      this.onSetup(status); // nothing to talk with yet: she sets it up with you, with buttons (setup.js)
-      return;
-    }
-    if (!status.ok) {
-      // no Ollama, or nothing to talk with yet: what to do about it
-      const offline = status.error === 'offline';
-      const other = !offline && status.error !== 'nomodel'; // another provider, saying why
-      capri.perform('curious', capri.towardCenter());
-      this.panel.say({
-        kind: 'info',
-        face: 'aside',
-        guide: true,
-        line: other ? t.failed : offline ? t.offline : t.noModel,
-        quote: other ? status.error : offline ? t.offlineHow : t.noModelHow,
-        actions: offline
-          ? [{ id: 'get', label: t.getOllama, primary: true }, { id: 'ok', label: t.ok }]
-          : [{ id: 'ok', label: t.ok, primary: true }],
-        onAction: (id) => {
-          if (id === 'get') host.openOllama();
-          this.panel.hide();
-        },
-        hold: null,
-      });
-      return;
-    }
+    this.localOnly = !status.ok;
     this.history = await host.chatMemory().catch(() => this.history); // "forget" in her menu may have emptied it
     this.cold = status.warmup && !this.warm;
     this.agent = Boolean(status.agent); // Claude Code answers, as her, and really works in your project
     this.listApps();
-    const shortModel = status.model.replace(/:latest$/, '').replace(/^models\//, ''); // Ollama's tag, Gemini's prefix
+    const shortModel = (status.model || 'Comandos locais').replace(/:latest$/, '').replace(/^models\//, ''); // Ollama's tag, Gemini's prefix
     const tiny = status.provider === 'ollama' && TINY.test(status.model) && this.onBetterModel;
     // angry, sulking, dizzy…: she greets you the way she feels, and her model is told she did
     const feeling = this.bond?.feeling;
@@ -231,10 +210,11 @@ export class Chat {
       face: moody ? MOOD_FACE[feeling] : 'look',
       badge: t.badge,
       tag: shortModel,
-      line: tiny ? fmt(t.tiny, { model: shortModel }) : hello,
-      actions: tiny ? [{ id: 'better', label: t.better, primary: true }] : [],
+      line: this.localOnly ? 'IA indisponível. Você pode usar /abrir, /executar e /obsidian sem IA.' : tiny ? fmt(t.tiny, { model: shortModel }) : hello,
+      actions: this.localOnly && this.onSetup ? [{ id: 'setup', label: 'Configurar IA', primary: true }] : tiny ? [{ id: 'better', label: t.better, primary: true }] : [],
       onAction: () => {
         this.panel.hide(); // her chat holds off her guide's panels: it goes first
+        if (this.localOnly) return this.onSetup?.(status);
         this.onBetterModel?.();
       },
       chat: {
@@ -253,6 +233,7 @@ export class Chat {
       return;
     }
     this.open = true;
+    this.archive('assistant', this.localOnly ? 'IA indisponível. Você pode usar /abrir, /executar e /obsidian sem IA.' : tiny ? fmt(t.tiny, { model: shortModel }) : hello, 'greeting');
     setTimeout(() => this.panel.chatInput.focus(), 150); // once the overlay has the keyboard
     capri.perform('hop');
     capri.nextMove = capri.nextGaze = performance.now() + STAY_MS;
@@ -261,24 +242,31 @@ export class Chat {
   close() {
     if (!this.open) return;
     this.open = false;
-    if (this.turn) this.host.chatStop(this.turn);
+    if (this.turn) {
+      if (this.answer) this.archive('assistant', clean(this.answer), 'partial');
+      this.archive('system', 'Conversa fechada durante a resposta. O trecho anterior pode estar incompleto.', 'cancelled');
+      this.host.chatStop(this.turn);
+    }
     this.turn = 0;
     this.host.focusOverlay(false);
     this.capri.nextMove = performance.now() + 30000;
     this.capri.nextGaze = performance.now() + 60000;
   }
 
-  async send(text) {
+  async send(text, { archiveUser = true } = {}) {
     if (this.turn || !this.open) return;
     const id = Date.now();
     this.turn = id;
     this.answer = '';
     this.history.push({ role: 'user', content: text });
+    if (archiveUser) this.archive('user', text);
     this.panel.setChatBusy(true);
     this.panel.setActions([]); // a close button she offered before goes with a new message
     this.panel.chatTurn({ quote: text, face: 'aside' });
     this.capri.pulse();
     this.onMessage?.();
+    const pcTask = computerTask(text);
+    if (pcTask) return this.sendComputer(pcTask, id);
     // what you asked for plainly happens right away (the music, the volume, an app you named): her
     // line about it comes under her answer (Claude Code, answering her chat, does things its own way)
     const asked = this.agent ? null : this.asked(text);
@@ -286,6 +274,10 @@ export class Chat {
     const early = asked && asked.kind !== 'close' ? this.doNow(asked) : null;
     this.bond?.heard(text); // "sorry": she lets it go
     await Promise.race([this.appsReady, new Promise((r) => setTimeout(r, 1500))]);
+    if (!this.open || this.turn !== id) {
+      if (this.history.at(-1)?.content === text) this.history.pop();
+      return;
+    }
     // what she greeted you with (angry, sulking…), in the conversation before your message, so her
     // answer carries on from it (after another answer of hers: added to that one, never two in a row)
     if (this.opening) {
@@ -322,11 +314,15 @@ export class Chat {
       this.history.pop();
       this.panel.setFace('wide');
       // too busy or gone even after trying other models (main.js): said plainly, not the server's JSON
-      this.panel.stream(res.code === 'busy' ? this.t.swamped : res.code === 'gone' ? this.t.gone : `${this.t.failed} ${res.error}`, { done: true });
+      const failure = res.code === 'busy' ? this.t.swamped : res.code === 'gone' ? this.t.gone : `${this.t.failed} ${res.error}`;
+      this.answer = failure;
+      this.archive('assistant', failure, 'error');
+      this.panel.stream(failure, { done: true });
       this.panel.setChatBusy(false);
       return;
     }
     const answer = clean(res.text) || '…';
+    this.answer = answer;
     this.warm = true;
     this.remember({ role: 'assistant', content: answer });
     this.panel.stream(answer, { done: true });
@@ -336,6 +332,26 @@ export class Chat {
     this.listApps(); // fresh for the next message
   }
 
+  async sendComputer(text, id) {
+    this.panel.stream('Consultando o computador e preparando a tarefa…');
+    let res;
+    try { res = await this.host.chatSend({ id, computerTask: text }); }
+    catch (error) { res = { ok: false, error: error.message }; }
+    if (this.turn !== id) return;
+    this.turn = 0;
+    const answer = res.ok ? res.text : `${this.t.failed} ${res.error}`;
+    this.answer = answer;
+    this.archive('assistant', answer, res.ok ? 'computer' : 'error');
+    this.panel.stream(answer, { done: true });
+    this.panel.setFace(res.ok ? 'look' : 'aside');
+    this.panel.setChatBusy(false);
+    // PC output can contain paths/file contents. Do not silently send it to a later chat provider.
+    this.remember({ role: 'assistant', content: res.ok
+      ? 'A tarefa de computador foi processada; seus resultados foram exibidos apenas localmente. Consulte o computador novamente para confirmar o estado, sem presumir sucesso de etapas.'
+      : 'A tarefa de computador não foi concluída. Os detalhes do erro foram exibidos apenas localmente.' }, { archive: false });
+    this.listApps();
+  }
+
   // "Look at my screen" in her chat: she looks (asking you first, the first time) and answers here,
   // the conversation so far in mind.
   async sendLook(text, id) {
@@ -343,6 +359,7 @@ export class Chat {
     const say = (line, face = 'aside') => {
       if (this.turn !== id) return;
       this.turn = 0;
+      this.answer = line;
       this.remember({ role: 'assistant', content: line });
       this.panel.stream(line, { done: true });
       this.panel.setFace(face);
@@ -360,7 +377,7 @@ export class Chat {
         }
         await this.host.setConfig({ lookAsked: true });
         this.look.asked = true;
-        this.send(text);
+        this.send(text, { archiveUser: false });
       });
       return;
     }
@@ -383,7 +400,22 @@ export class Chat {
   }
 
   // an answer of hers, kept with your message before it
-  remember(message) {
+  archive(role, content, kind = 'chat') {
+    if (!content || !this.host.archiveChat) return;
+    const id = crypto.randomUUID();
+    this.archivePending = (this.archivePending || Promise.resolve()).then(() => this.host.archiveChat({ id, role, content, kind }))
+      .then((state) => {
+        const warning = !state.ok ? `Não foi possível registrar a conversa: ${state.error}` : state.pending ? `Conversa na fila local (${state.pending}); aguardando o cofre do Obsidian.` : null;
+        this.archiveWarning = warning;
+        if (warning && this.open && !this.turn && this.answer) this.panel.stream(`${this.answer}\n\n[${warning}]`, { done: true });
+      }).catch((error) => {
+        this.archiveWarning = `Falha no registro da conversa: ${error.message}`;
+        if (this.open && !this.turn && this.answer) this.panel.stream(`${this.answer}\n\n[${this.archiveWarning}]`, { done: true });
+      });
+  }
+
+  remember(message, { archive = true } = {}) {
+    if (archive) this.archive(message.role, message.content);
     this.history.push(message);
     this.history = this.history.slice(-KEEP);
     this.host.chatRemember(this.history);
@@ -396,6 +428,7 @@ export class Chat {
   // What you asked plainly, read off your message (a small model doesn't always write its tag right):
   // { kind: 'media', action } | { kind: 'music', song } | { kind: 'close', name } | { kind: 'open', text }
   asked(text) {
+    if (!actionIntent(text)) return null;
     const count = text.trim().split(/\s+/).length;
     if (this.reminders) {
       const remind = parseReminder(text);
@@ -494,7 +527,7 @@ export class Chat {
       // "…and open the folder" / "…and open it": done right away, on the newest one
       if (asked.then === 'folder' && (await this.host.openFile(results[0].path, true))) lines.push(fmt(t.folderOpened, { name: results[0].name }));
       // (never a program or a script on its own: that one waits for its button)
-      const runs = /\.(exe|bat|cmd|ps1|vbs|vbe|js|jse|wsf|msi|reg|scr|com|jar|hta)$/i.test(results[0].name);
+      const runs = results[0].risky !== false;
       if (asked.then === 'open' && !runs && (await this.host.openFile(results[0].path))) lines.push(fmt(t.opened, { app: results[0].name }));
       return { line: lines.join('\n'), face: 'smug', files: results };
     }
@@ -553,6 +586,7 @@ export class Chat {
   // her tag asks for, if your message (text) asked for that kind of thing.
   async after(raw, answer, asked, early, text) {
     const { t } = this;
+    if (!actionIntent(text)) return;
     const done = early && (await early);
     if (done?.reminder) {
       // a reminder set: a button to take it back, right there
@@ -575,7 +609,7 @@ export class Chat {
       actions.push({ id: 'folder', label: t.showFolder });
       this.panel.setActions(actions, (id) => {
         if (id === 'folder') return this.host.openFile(first.path, true);
-        return this.host.openFile((id === 'second' ? second : first).path);
+        return this.host.openFile((id === 'second' ? second : first).path, false, true);
       });
       return undefined;
     }
@@ -603,6 +637,8 @@ export class Chat {
   // her answer, with a line of what she did under it
   addLine(answer, line, face = null) {
     if (!this.open || this.turn) return;
+    this.answer = answer === '…' ? line : `${answer}\n${line}`;
+    this.archive('assistant', line, 'action-result');
     this.panel.stream(answer === '…' ? line : `${answer}\n${line}`, { done: true }); // nothing but a tag: just the line
     if (face) this.panel.setFace(face);
   }
@@ -626,7 +662,7 @@ export class Chat {
     }
     this.panel.setActions([]);
     this.zap();
-    const res = await this.host.launch(item);
+    const res = await this.host.launch({ ...item, confirmed: true });
     this.addLine(answer, res.ok ? fmt(t.opened, { app: this.nameOf(item) }) : `${t.failed} ${res.error}`, res.ok ? 'laugh' : 'aside');
   }
 
@@ -738,7 +774,7 @@ export class Chat {
       if (soon.length) lines.push(`Reminders you're keeping for them: ${soon.map((r) => `${clock(r.at, this.brain.lang)}${r.text ? ` (${r.text})` : ''}`).join('; ')}.`);
     }
     lines.push('Your system also searches the user\'s files when they ask you to find one, searches the web when they ask, takes screenshots, and starts Roblox games by name: what it did shows under your answer, so never make up file names or results.');
-    lines.push('Apart from that, you can\'t see the user\'s screen or files, and you can\'t touch anything else on their PC (settings, files): if asked, say plainly that you can\'t, in character, and don\'t pretend to.');
+    lines.push('For multi-step Windows tasks, inspecting PC hardware or installed apps, operating app controls, or file operations, the user can write /pc followed by their task. This mode gathers real PC context and executes a bounded sequence of tools; PowerShell steps require a native confirmation showing the exact script. Suggest /pc when a task needs these capabilities. Never claim to have inspected or changed anything without tool results. Screen access still requires separate consent.');
     return lines;
   }
 
@@ -746,6 +782,7 @@ export class Chat {
   // False if she's in the middle of an answer.
   interject(line, actions, onAction) {
     if (!this.open || this.turn) return false;
+    this.answer = line;
     this.panel.setFace('look');
     this.panel.stream(line, { done: true });
     this.panel.setActions(actions, onAction);
@@ -872,4 +909,12 @@ export function mood(text) {
   if (text.includes('!')) return 'grin';
   if (text.trim().endsWith('?')) return 'smug';
   return 'look';
+}
+
+export function actionIntent(text) {
+  // Questions about commands, negations and quoted examples are not instructions.
+  if (/["“”«»`]/u.test(text)) return false;
+  if (/(?:^|\s)(?:don't|don’t|do not|never|no|not|não|nao|nunca|ne|pas|jamais|не|нет)(?=\s|$)/iu.test(text)) return false;
+  if (/^(?:how|what|why|when|where|como|o que|por que|comment|pourquoi|qu['’]est|c[oó]mo|qu[eé]|как|что|почему)(?!\p{L})/iu.test(text.trim().replace(/^[¿¡]/u, ''))) return false;
+  return true;
 }

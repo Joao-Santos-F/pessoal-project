@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, shell, desktopCapturer, screen } = require('electron');
 const { powershell } = require('./apps');
+const { risky } = require('./launch');
 
 const LIMIT = 8;
 const found = new Set(); // what a search showed you: the only paths she opens from here
@@ -56,7 +57,7 @@ function walked(terms, exts) {
   const hits = [];
   const queue = roots.map((dir) => [dir, 0]);
   let seen = 0;
-  while (queue.length && hits.length < LIMIT * 3 && seen < 40000) {
+  while (queue.length && seen < 40000) {
     const [dir, depth] = queue.shift();
     let entries = [];
     try {
@@ -65,6 +66,7 @@ function walked(terms, exts) {
       continue;
     }
     for (const e of entries) {
+      if (seen >= 40000) break;
       seen++;
       if (e.name.startsWith('.') || e.name === 'node_modules') continue;
       const full = path.join(dir, e.name);
@@ -88,26 +90,27 @@ async function search({ query = '', exts = [] } = {}) {
 }
 
 function listed(paths) {
-  const results = paths.filter((p) => !junk(p)).slice(0, LIMIT).map((p) => {
+  const results = paths.filter((p) => !junk(p)).map((p) => {
     let time = 0;
     try {
       time = fs.statSync(p).mtimeMs;
     } catch {
       return null; // gone since
     }
-    return { path: p, name: path.basename(p), folder: path.basename(path.dirname(p)), time };
-  }).filter(Boolean);
+    return { path: p, name: path.basename(p), folder: path.basename(path.dirname(p)), time, risky: risky({ kind: 'file', id: p }) };
+  }).filter(Boolean).sort((a, b) => b.time - a.time).slice(0, LIMIT);
   for (const r of results) found.add(r.path);
   return results;
 }
 
 // one of the files she found: opened, or shown in its folder
-async function open(file, { reveal = false } = {}) {
+async function open(file, { reveal = false, confirmed = false } = {}) {
   if (!found.has(file)) throw new Error('not one she found');
   if (reveal) {
     shell.showItemInFolder(file);
     return;
   }
+  if (risky({ kind: 'file', id: file }) && !confirmed) throw new Error('confirmation required');
   const err = await shell.openPath(file);
   if (err) throw new Error(err);
 }

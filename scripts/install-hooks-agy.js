@@ -66,11 +66,14 @@ function readSettings(file) {
 
 function strip(settings) {
   delete settings[HOOK_KEY];
-  for (const [key, val] of Object.entries(settings)) {
-    if (val && typeof val === 'object' && (JSON.stringify(val).includes(MARK) || JSON.stringify(val).includes('capri-hook.js'))) {
-      delete settings[key];
-    }
-  }
+  const clean = (value) => {
+    if (Array.isArray(value)) return value.filter((v) => !v?.command ||
+      ![MARK, 'capri-hook.js'].some((mark) => String(v.command).includes(mark))).map(clean);
+    if (value && typeof value === 'object') return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, clean(child)]));
+    return value;
+  };
+  for (const key of Object.keys(settings)) settings[key] = clean(settings[key]);
   return settings;
 }
 

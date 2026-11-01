@@ -199,7 +199,12 @@ export class Pc {
 
   checkGame() {
     const g = this.game;
-    if (!g || !this.enabled) return;
+    if (!g) return;
+    if (!this.enabled) {
+      this.game = null;
+      if (g.put && this.capri.stowed && this.wantsOut()) this.capri.unstow();
+      return;
+    }
     const now = Date.now();
     // you're playing: a word about it, then she gets out of the way (she's always on top)
     if (!g.said && !g.gone && now - g.since >= GAME_AFTER) {
@@ -208,7 +213,7 @@ export class Pc {
       this.capri.wake();
       this.say(fmt(pick(this.t.game), { game: g.name }), 'smug', 3000);
       setTimeout(() => {
-        if (this.game !== g || g.gone || this.capri.stowed || this.capri.mode === 'alert') return;
+        if (!this.enabled || this.game !== g || g.gone || this.capri.stowed || this.capri.mode === 'alert') return;
         g.put = true;
         this.capri.stow();
       }, 2600);

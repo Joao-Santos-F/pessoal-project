@@ -82,7 +82,9 @@ export function parseWhen(text, now = Date.now()) {
     h = NOON.test(noon[0]) ? 12 : 0;
     spans.push(noon);
   } else {
-    m = AT.exec(text);
+    m = [...text.matchAll(new RegExp(AT.source, 'giu'))].find((candidate) =>
+      /[h:.]|heure|hour|hora|час|am|pm|a\.m|p\.m/i.test(candidate[0].slice(String(candidate[1]).length)) ||
+      /^\s*(à|a|at|a las|a la|às|as|в|к)\s/i.test(candidate[0]));
     if (m && Number(m[1]) <= 23 && (m[2] === undefined || Number(m[2]) <= 59)) {
       // a bare number only counts as a time with a "h", ":", am/pm or "at" in front
       const said = /[h:.]|heure|hour|hora|час|am|pm|a\.m|p\.m/i.test(m[0].slice(String(m[1]).length)) || /^\s*(à|a|at|a las|a la|às|as|в|к)\s/i.test(m[0]);

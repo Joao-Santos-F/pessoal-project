@@ -12,6 +12,7 @@ const KEEP = new Set([
   'explorer', 'applicationframehost', 'textinputhost', 'shellexperiencehost', 'startmenuexperiencehost',
   'searchhost', 'searchapp', 'lockapp', 'dwm', 'capri', 'electron', 'claude', 'codex', 'ollama', 'ollama app',
 ]);
+const closing = new Map(); // identities offered for a second, explicit force-quit
 
 function powershell(script, timeout = 15000) {
   return new Promise((resolve, reject) => {
@@ -27,15 +28,16 @@ async function list() {
   if (process.platform !== 'win32') return [];
   const out = await powershell(
     'Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | '
-    + 'ForEach-Object { [pscustomobject]@{ id = $_.Id; name = $_.ProcessName; label = $_.Description } } | '
+    + 'ForEach-Object { [pscustomobject]@{ id = $_.Id; name = $_.ProcessName; label = $_.Description; started = $_.StartTime.ToUniversalTime().Ticks.ToString() } } | '
     + 'ConvertTo-Json -Compress',
   );
   const rows = [].concat(out ? JSON.parse(out) : []);
   const apps = new Map();
-  for (const { id, name, label } of rows) {
+  for (const { id, name, label, started } of rows) {
     if (id === process.pid || KEEP.has(name.toLowerCase())) continue;
-    const app = apps.get(name) || { name, process: name, label: label || '', ids: [] };
+    const app = apps.get(name) || { name, process: name, label: label || '', ids: [], starts: {} };
     app.ids.push(id);
+    app.starts[id] = started;
     apps.set(name, app);
   }
   return [...apps.values()];
@@ -62,16 +64,22 @@ async function find(wanted) {
 // Closes it like its close button would; `force` ends it outright (unsaved work is lost).
 // Resolves with what's left: { running } (true when it stayed open, or hid in the tray).
 async function close(name, { force = false } = {}) {
-  const app = (await list()).find((a) => a.process === name);
+  if (KEEP.has(String(name).toLowerCase())) return { running: true };
+  const app = force ? closing.get(name) : (await list()).find((a) => a.process === name);
   if (!app) return { running: false };
+  if (!force) closing.set(name, app);
   const ids = app.ids.join(',');
+  const identities = app.ids.filter((id) => /^\d+$/.test(String(app.starts[id]))).map((id) =>
+    `($_.Id -eq ${id} -and $_.StartTime.ToUniversalTime().Ticks -eq ${app.starts[id]})`).join(' -or ') || '$false';
   const out = await powershell(force
-    ? `Stop-Process -Id ${ids} -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; `
+    ? `Get-Process -Id ${ids} -ErrorAction SilentlyContinue | Where-Object { ${identities} } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; `
       + `@(Get-Process -Id ${ids} -ErrorAction SilentlyContinue).Count`
     : `foreach ($p in @(Get-Process -Id ${ids} -ErrorAction SilentlyContinue)) { [void]$p.CloseMainWindow() }; `
       + 'Start-Sleep -Milliseconds 2500; '
       + `@(Get-Process -Name '${name.replace(/'/g, "''")}' -ErrorAction SilentlyContinue).Count`);
-  return { running: Number(out) > 0 };
+  const running = Number(out) > 0;
+  if (!running) closing.delete(name);
+  return { running };
 }
 
 module.exports = { list, find, close, powershell };

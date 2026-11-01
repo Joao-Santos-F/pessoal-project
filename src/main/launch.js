@@ -25,7 +25,8 @@ const plain = (text) => String(text || '').toLowerCase().normalize('NFKD').repla
 const words = (text) => plain(text).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
 
 // Everything she can open: [{ name, kind: 'app' | 'steam' | 'epic', id }]
-async function launchables() {
+async function launchables({ refresh = false } = {}) {
+  if (refresh) cache = null;
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.items;
   if (!WIN) return [];
   const items = [];
@@ -42,6 +43,14 @@ async function launchables() {
   const out = await powershell('Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress', 45000).catch(() => null);
   for (const { Name, AppID } of [].concat(out ? JSON.parse(out) : [])) {
     if (Name && AppID && !/^https?:/i.test(AppID)) add({ name: Name, kind: 'app', id: AppID });
+  }
+  // Registered executables not necessarily represented in the Start menu.
+  const registered = await powershell("$roots = @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths'); @(foreach ($root in $roots) { Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object { $p = $_.GetValue(''); if ($p) { [pscustomobject]@{ name=$_.PSChildName; path=$p } } } }) | ConvertTo-Json -Compress").catch(() => '');
+  let entries = [];
+  try { entries = [].concat(registered ? JSON.parse(registered) : []); } catch { /* registry unavailable */ }
+  for (const entry of entries) {
+    const file = String(entry.path || '').replace(/^"|"$/g, '');
+    if (/\.exe$/i.test(file) && path.isAbsolute(file) && fs.existsSync(file)) add({ name: String(entry.name).replace(/\.exe$/i, ''), kind: 'executable', id: file });
   }
   if (out !== null) cache = { at: Date.now(), items }; // a list that failed isn't kept: next time, again
   return items;
@@ -151,8 +160,8 @@ function desktopItems() {
 }
 
 // files that run something: never opened without a click, even named by you
-const RUNS = /\.(exe|bat|cmd|ps1|vbs|vbe|js|jse|wsf|wsh|msi|msp|reg|scr|com|jar|hta|cpl|pif)$/i;
-const risky = (item) => item?.kind === 'file' && RUNS.test(item.id);
+const RUNS = /\.(exe|bat|cmd|ps1|vbs|vbe|js|jse|wsf|wsh|msi|msp|reg|scr|com|jar|hta|cpl|pif|lnk|url)$/i;
+const risky = (item) => item?.kind === 'executable' || (item?.kind === 'file' && RUNS.test(item.id));
 
 // Folders asked for by what they are ("ouvre mes téléchargements", "open the file explorer").
 const FOLDERS = [
@@ -185,20 +194,28 @@ async function find(text) {
 // Opens one of them (only something she listed herself): a Start menu app through its AppsFolder
 // entry (desktop and Store apps alike), a game through its launcher's link, a file or folder from
 // your desktop, a folder by what it is.
-async function launch({ kind, id } = {}) {
+async function launch({ kind, id, confirmed = false } = {}) {
+  if (risky({ kind, id }) && !confirmed) throw new Error('confirmation required');
   if (kind === 'known') {
     if (!FOLDERS.some(([key]) => key === id)) throw new Error('not found');
     await openKnown(id);
     return undefined;
   }
   if (kind === 'file' || kind === 'folder') {
-    if (!desktopItems().some((i) => i.id === id)) throw new Error('not found');
+    const actual = desktopItems().find((i) => i.id === id && i.kind === kind);
+    if (!actual) throw new Error('not found');
+    if (risky(actual) && !confirmed) throw new Error('confirmation required');
     const err = await shell.openPath(id);
     if (err) throw new Error(err);
     return undefined;
   }
   const item = (await launchables()).find((i) => i.kind === kind && i.id === id);
   if (!item) throw new Error('not found');
+  if (kind === 'executable') {
+    const error = await shell.openPath(item.id);
+    if (error) throw new Error(error);
+    return;
+  }
   if (kind === 'steam') return shell.openExternal(`steam://rungameid/${id}`);
   if (kind === 'epic') return shell.openExternal(`com.epicgames.launcher://apps/${encodeURIComponent(id)}?action=launch&silent=true`);
   spawn('explorer.exe', [`shell:AppsFolder\\${id}`], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();

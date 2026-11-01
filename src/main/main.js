@@ -8,6 +8,13 @@ const {
   app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage,
   clipboard, ClipboardItem, dialog, powerMonitor, desktopCapturer,
 } = require('electron');
+// Separate profiles for local testing or parallel configurations. Never infer this from APPDATA:
+// Electron resolves its default path through Windows' known folders.
+if (process.env.CAPRI_USER_DATA) {
+  const profile = path.resolve(process.env.CAPRI_USER_DATA);
+  fs.mkdirSync(profile, { recursive: true });
+  app.setPath('userData', profile);
+}
 const { randomUUID } = require('node:crypto');
 
 const config = require('./config');
@@ -20,6 +27,12 @@ const setup = require('./setup');
 const apps = require('./apps');
 const launch = require('./launch');
 const files = require('./files');
+const computer = require('./computer');
+const obsidian = require('./obsidian');
+const { ChatArchive } = require('./chat-archive');
+const obsidianAppData = () => process.env.CAPRI_OBSIDIAN_APPDATA || app.getPath('appData');
+let chatArchive;
+const direct = require('./direct');
 const { ASSISTANTS, assistant } = require('./assistants');
 const activeAssistant = () => assistant(config.load().assistant); // Claude Code or Codex
 const activeHooks = () => activeAssistant().hooks;
@@ -49,6 +62,7 @@ let chatErrorCode = null; // 'nokey' or 'nourl': what her setup should ask for
 // Ollama's cloud, as last seen: your account ({ name } or { signin }) and the models free with it
 let cloud = { at: 0, account: null, free: [] };
 const chats = new Map(); // id -> AbortController of an answer being streamed
+let computerBusy = false;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
@@ -281,10 +295,24 @@ function resolveLang(setting) {
 // What the overlay gets: `lang` is the resolved one, `langSetting` what the user picked.
 function rendererConfig() {
   const { apiKeys, ...cfg } = config.load(); // the keys stay here: the overlay only learns which ones are set
+  cfg.lookAsked = screenAllowed();
+  cfg.watchScreen = cfg.watchScreen && cfg.lookAsked;
   return { ...cfg, keys: Object.keys(apiKeys || {}), assistant: activeAssistant().id, lang: resolveLang(cfg.lang), langSetting: cfg.lang, floorGap: overlayArea().gap };
 }
 
 function updateConfig(patch) {
+  const before = config.load();
+  if (patch.lookAsked && patch.lookConsent !== screenDestination()) {
+    patch = { ...patch, lookAsked: false, watchScreen: false };
+  }
+  if (['provider', 'chatModel', 'customUrl'].some((key) => key in patch && patch[key] !== before[key])) {
+    patch = { ...patch, lookAsked: false, watchScreen: false };
+    snaps.clear();
+  }
+  if (['provider', 'customUrl'].some((key) => key in patch && patch[key] !== before[key])) {
+    chatModels = null;
+    modelGeneration++;
+  }
   config.save(patch);
   if ('rest' in patch) {
     fitOverlay(); // the taskbar in her window or not
@@ -294,6 +322,15 @@ function updateConfig(patch) {
   overlay?.webContents.send('capri:config', cfg);
   rebuildTray();
   return cfg;
+}
+
+function screenDestination(cfg = config.load()) {
+  return JSON.stringify([cfg.provider, cfg.customUrl || '', pickModel(cfg), process.env.OLLAMA_HOST || '']);
+}
+
+function screenAllowed() {
+  const cfg = config.load();
+  return Boolean(cfg.lookAsked && cfg.lookConsent === screenDestination());
 }
 
 function rebuildTray() {
@@ -521,15 +558,20 @@ function pickModel(cfg = config.load()) {
   return chatModels.find((m) => !ollama.isCloud(m)) || chatModels[0];
 }
 
+let modelGeneration = 0;
 async function refreshModels() {
+  const generation = ++modelGeneration;
   const cfg = config.load();
-  chatError = null;
-  chatErrorCode = null;
-  chatModels = await llm.models(cfg.provider, llmConfig(cfg)).catch((err) => {
-    chatError = err.message;
-    chatErrorCode = err.code || null;
+  let failure = null;
+  const models = await llm.models(cfg.provider, llmConfig(cfg)).catch((err) => {
+    failure = err;
     return null;
   });
+  if (generation !== modelGeneration || cfg.provider !== config.load().provider || cfg.customUrl !== config.load().customUrl) return chatModels;
+  chatModels = models;
+  chatError = failure?.message || null;
+  chatErrorCode = failure?.code || null;
+  if (cfg.lookAsked && !screenAllowed()) updateConfig({ lookAsked: false, watchScreen: false });
   rebuildTray();
   if (cfg.provider === 'ollama' && chatModels) refreshCloud(); // in the background: it asks ollama.com
   return chatModels;
@@ -591,7 +633,9 @@ async function chatWithFallback(cfg, messages, send, signal, streamed) {
         continue;
       }
       tried.add(model);
-      const next = chatModels?.find((m) => !tried.has(m) && !ollama.isCloud(m)) || chatModels?.find((m) => !tried.has(m));
+      const candidates = chatModels?.filter((m) => !tried.has(m) &&
+        (!llm.isLocal(cfg.provider, cfg, pickModel(cfg)) || llm.isLocal(cfg.provider, cfg, m)));
+      const next = candidates?.find((m) => !ollama.isCloud(m)) || candidates?.[0];
       if (!next || tried.size >= 3) throw err;
       model = next;
       busy = 0;
@@ -616,8 +660,10 @@ async function snapScreen() {
 // What her AI says about that picture, as her (`persona`), asked `prompt`. With a code when it can't:
 // 'noai' (nothing to ask), 'novision' (that model can't look at pictures).
 async function sayAboutSnap({ id, persona, prompt, history = [] }) {
-  const image = snaps.get(id);
+  if (!screenAllowed()) return { ok: false, error: 'screen permission required' };
+  const snap = snaps.get(id);
   snaps.delete(id);
+  const image = snap?.destination === screenDestination() ? snap.image : null;
   if (!image) return { ok: false, error: 'the picture is gone' };
   const cfg = config.load();
   if (!chatModels?.length) await refreshModels();
@@ -633,6 +679,7 @@ async function sayAboutSnap({ id, persona, prompt, history = [] }) {
   const messages = [{ role: 'system', content: persona }, ...before, user];
   for (let attempt = 0; ; attempt++) {
     try {
+      if (!screenAllowed() || snap.destination !== screenDestination()) return { ok: false, error: 'screen destination changed' };
       const text = await llm.chat(cfg.provider, llmConfig(cfg), { model, messages }, () => {}, AbortSignal.timeout(120000));
       return { ok: true, text, model };
     } catch (err) {
@@ -725,7 +772,7 @@ function registerIpc() {
     return { ok: true, provider, model, agent: provider === 'claude', local, warmup: provider === 'ollama' && local };
   });
   // her answer, streamed to the overlay piece by piece as `chat:delta`
-  ipcMain.handle('chat:send', async (_e, { id, messages }) => {
+  ipcMain.handle('chat:send', async (_e, { id, messages, computerTask }) => {
     const abort = new AbortController();
     chats.set(id, abort);
     try {
@@ -735,11 +782,105 @@ function registerIpc() {
         overlay?.webContents.send('chat:delta', { id, text });
       };
       const cfg = config.load();
+      if (computerTask !== undefined) {
+        if (process.platform !== 'win32') throw new Error('As tarefas de computador exigem Windows.');
+        if (typeof computerTask !== 'string' || !computerTask.trim() || computerTask.length > 16000) throw new Error('Tarefa inválida.');
+        if (computerBusy) throw new Error('Já existe uma tarefa de computador em andamento.');
+        computerBusy = true;
+        try {
+          const archiveCommand = /^\/obsidian\s+historico(?:\s+(status|ativar|pausar|sincronizar))?$/i.exec(computerTask.trim());
+          if (archiveCommand) {
+            const action = (archiveCommand[1] || 'status').toLowerCase();
+            if (action === 'ativar' || action === 'pausar') config.save({ obsidianArchive: action === 'ativar' });
+            const state = action === 'pausar' ? chatArchive.status() : chatArchive.flush();
+            return { ok: true, text: `Histórico automático: ${state.enabled ? 'ativado' : 'pausado'}.\nPendentes: ${state.pending}.\n${state.file ? `Última nota: ${state.file}` : 'Destino: Capri/Conversas no cofre selecionado.'}${state.error ? `\nAviso: ${state.error}` : ''}` };
+          }
+          const approveLocal = async (message, detail) => {
+            if (abort.signal.aborted) return false;
+            const result = await dialog.showMessageBox(overlay, { type: 'question', title: 'Capri — confirmar ação', message, detail,
+              buttons: ['Cancelar', 'Confirmar'], defaultId: 0, cancelId: 0, noLink: true });
+            return result.response === 1 && !abort.signal.aborted;
+          };
+          const obsidianResult = await obsidian.handle(computerTask, {
+            appData: obsidianAppData(), selected: cfg.obsidianVault,
+            saveSelection: (id) => config.save({ obsidianVault: id }),
+            openExternal: (uri) => shell.openExternal(uri), approve: approveLocal, signal: abort.signal,
+          });
+          if (obsidianResult !== null) return { ok: true, text: obsidianResult };
+          const directResult = await direct.handle(computerTask, {
+            launch, shell, approve: approveLocal, execute: computer.runScript, signal: abort.signal,
+            chooseFile: async () => {
+              const result = await dialog.showOpenDialog(overlay, { title: 'Escolher aplicativo ou arquivo', properties: ['openFile'] });
+              return result.canceled ? null : result.filePaths[0];
+            },
+          });
+          if (directResult !== null) return { ok: true, text: directResult };
+          // Arithmetic does not need model inference or disclosure of the PC inventory.
+          const arithmetic = /^(?:calcule|calcula|calculate|quanto [ée])\s+([\d\s.,()+*/^%×÷-]+)[?]?$/i.exec(computerTask.trim());
+          if (arithmetic) {
+            const value = computer.calculate(arithmetic[1]);
+            return { ok: true, text: `${value.expression} = ${value.result}` };
+          }
+          if (computer.infoRequest(computerTask)) {
+            const context = await computer.snapshot({ launch, apps, app, signal: abort.signal });
+            if (abort.signal.aborted) throw new Error('Tarefa cancelada.');
+            return { ok: true, text: computer.describe(context) };
+          }
+          if (cfg.provider === 'claude') throw new Error('Para planejar tarefas /pc, selecione Ollama ou um provedor de chat. /abrir, /executar e /obsidian funcionam sem planejamento por IA.');
+          const model = pickModel(cfg);
+          // Pin this provider/model for the whole task: no silent fallback after consent.
+          if (!llm.isLocal(cfg.provider, cfg, model)) {
+            const { response } = await dialog.showMessageBox(overlay, {
+              type: 'question', title: 'Capri — contexto do computador',
+              message: `Enviar informações do PC para ${cfg.provider} / ${model}?`,
+              detail: 'Esta tarefa usa informações de hardware, discos, pastas pessoais, nomes dos programas instalados e abertos e resultados dos comandos aprovados. Não inclui captura de tela automática. Os resultados podem conter conteúdo de arquivos se você aprovar uma leitura.',
+              buttons: ['Cancelar', 'Permitir nesta tarefa'], defaultId: 0, cancelId: 0,
+            });
+            if (response !== 1 || abort.signal.aborted) throw new Error('Tarefa cancelada.');
+          }
+          const context = await computer.snapshot({ launch, apps, app, signal: abort.signal });
+          const result = await computer.task({
+            text: computerTask, context, signal: abort.signal,
+            obsidianTask: (command) => obsidian.handle(command, {
+              appData: obsidianAppData(), selected: config.load().obsidianVault,
+              saveSelection: (id) => config.save({ obsidianVault: id }),
+              openExternal: (uri) => shell.openExternal(uri), approve: async () => true, signal: abort.signal,
+            }),
+            // Progress replaces the current line; the final result replaces it again.
+            progress: (text) => overlay?.webContents.send('computer:progress', { id, text }),
+            complete: (steps, signal) => llm.chat(cfg.provider, llmConfig(cfg), {
+              model, json: true, messages: steps.map(({ role, content }) => ({ role, content })),
+            }, () => {}, AbortSignal.any([signal, AbortSignal.timeout(120000)])),
+            approve: async ({ reason, script }) => {
+              const { response } = await dialog.showMessageBox(overlay, {
+                type: 'warning', title: 'Capri — executar no computador', message: reason,
+                detail: `Execute somente se esta etapa corresponde ao seu pedido. O comando usa as permissões da sua conta.\n\n${script}`,
+                buttons: ['Cancelar', 'Executar esta etapa'], defaultId: 0, cancelId: 0, noLink: true,
+              });
+              return response === 1;
+            },
+            openApp: async (name) => {
+              const installed = await launch.launchables();
+              const normalize = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+              const item = installed.find((i) => normalize(i.name) === normalize(name));
+              if (!item) return { ok: false, error: 'Nome não encontrado no inventário. Consulte o nome exato ou use uma etapa PowerShell confirmada.' };
+              if (launch.risky(item) && !(await approveLocal('Abrir aplicativo', item.id))) return { ok: false, error: 'Abertura cancelada.' };
+              if (abort.signal.aborted) throw new Error('Tarefa cancelada.');
+              try { await launch.launch({ ...item, confirmed: true }); return { ok: true, requestedLaunch: item.name, note: 'Abertura solicitada; verifique a janela antes de interagir.' }; }
+              catch (e) { return { ok: false, error: e.message }; }
+            },
+          });
+          const evidence = result.results.map(({ tool, result: r }, i) => `${i + 1}. ${tool}: ${r.ok ? 'OK' : 'falhou'}${r.expression ? ` — ${r.expression} = ${r.result}` : ''}${r.requestedLaunch ? ` — ${r.requestedLaunch}` : ''}${r.error ? ` — ${r.error}` : ''}${r.output ? `\n${r.output.slice(0, 1500)}` : ''}`).join('\n');
+          return { ok: true, text: result.text + (evidence ? `\n\nEtapas verificadas:\n${evidence}` : '') };
+        } finally { computerBusy = false; }
+      }
       const text = await chatWithFallback(cfg, messages, send, abort.signal, () => streamed);
       if (cfg.provider === 'claude') saveMemory({ claude: llm.claudeMemory() });
       return { ok: true, text };
     } catch (err) {
-      return { ok: false, error: abort.signal.aborted ? 'stopped' : err.message, code: err.code || null };
+      const previous = err.computerResults?.map(({ tool, result }) => `${tool}: ${result.ok ? 'OK' : 'falhou'}${result.error ? ` — ${result.error}` : ''}${result.output ? `\n${result.output.slice(0, 800)}` : ''}`).join('\n');
+      const error = abort.signal.aborted ? 'Tarefa cancelada.' : err.name === 'TimeoutError' ? 'O modelo demorou demais para planejar esta tarefa. Tente um pedido mais simples ou selecione outro modelo. Cálculos e consultas básicas do PC funcionam sem planejamento por IA.' : err.message;
+      return { ok: false, error: error + (previous ? `\nEtapas anteriores (não desfeitas):\n${previous}` : ''), code: err.code || null };
     } finally {
       chats.delete(id);
     }
@@ -748,8 +889,12 @@ function registerIpc() {
   // she looks at your screen (look.js): the picture first, then what her AI says about it
   ipcMain.handle('look:snap', async () => {
     try {
+      if (!screenAllowed()) throw new Error('screen permission required');
+      const destination = screenDestination();
       const id = randomUUID();
-      snaps.set(id, await snapScreen());
+      const image = await snapScreen();
+      if (!screenAllowed() || destination !== screenDestination()) throw new Error('screen destination changed');
+      snaps.set(id, { image, destination });
       setTimeout(() => snaps.delete(id), 120000);
       return { ok: true, id };
     } catch (err) {
@@ -776,9 +921,10 @@ function registerIpc() {
     const cfg = config.load();
     const model = pickModel(cfg);
     const provider = cfg.provider === 'ollama' && ollama.isCloud(model) ? 'Ollama' : llm.PROVIDERS[cfg.provider]?.label || cfg.provider;
-    return { local: llm.isLocal(cfg.provider, cfg, model), provider, model };
+    return { local: llm.isLocal(cfg.provider, cfg, model), provider, model, consent: screenDestination(cfg) };
   });
   ipcMain.handle('chat:memory', () => readMemory().history || []);
+  ipcMain.handle('chat:archive', (_e, message) => chatArchive.record(message));
   ipcMain.on('chat:remember', (_e, history) => Array.isArray(history) && saveMemory({ history }));
   ipcMain.on('chat:ollama', () => shell.openExternal(OLLAMA_SITE));
   // setting her up with buttons (setup.js): Ollama and a model, or a key, or an address
@@ -842,7 +988,7 @@ function registerIpc() {
   ipcMain.handle('apps:roblox', (_e, query) => launch.roblox(query).catch(() => null));
   // your files (files.js): a search, opening what it found, a screenshot, a search on the web
   ipcMain.handle('files:search', (_e, query) => files.search(query).catch(() => []));
-  ipcMain.handle('files:open', (_e, { file, reveal }) => files.open(String(file), { reveal: Boolean(reveal) }).then(() => true, () => false));
+  ipcMain.handle('files:open', (_e, { file, reveal, confirmed }) => files.open(String(file), { reveal: Boolean(reveal), confirmed: confirmed === true }).then(() => true, () => false));
   ipcMain.handle('files:screenshot', () => files.screenshot(targetDisplay()).catch(() => null));
   ipcMain.handle('web:search', (_e, query) => {
     const q = String(query || '').trim().slice(0, 300);
@@ -1027,6 +1173,13 @@ function main() {
   if (process.platform === 'win32') app.setAppUserModelId('capri.desktop');
 
   app.whenReady().then(() => {
+    chatArchive = new ChatArchive({
+      profile: app.getPath('userData'), enabled: () => config.load().obsidianArchive !== false,
+      resolveVault: (id) => obsidian.selectVault(obsidian.vaults(obsidianAppData()), id || config.load().obsidianVault),
+    });
+    chatArchive.flush();
+    const archiveRetry = setInterval(() => chatArchive.flush(), 30000);
+    archiveRetry.unref();
     if (!['codex', 'claude'].includes(config.load().assistant)) config.save({ assistant: activeAssistant().id });
     serveProtocol();
     registerIpc();
