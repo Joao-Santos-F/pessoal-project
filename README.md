@@ -40,6 +40,18 @@ A execução de ações internas depende de CLI, API ou controles acessíveis do
 
 Os comandos locais `/abrir`, `/executar` e `/obsidian` podem funcionar sem modelo. Downloads iniciais de dependências, Electron e modelos exigem internet. Provedores remotos podem exigir conta, chave e pagamento próprios.
 
+## Instalação rápida no Windows
+
+**[Baixar Capri-Setup-0.4.7.exe](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.7/Capri-Setup-0.4.7.exe)** · [Último release](https://github.com/Joao-Santos-F/pessoal-project/releases/latest)
+
+1. Baixe o instalador acima, para Windows 10/11 de 64 bits.
+2. Feche a Capri caso esteja aberta e execute o `.exe`.
+3. Abra a Capri pelo atalho e configure o provedor de IA e o cofre do Obsidian conforme as seções abaixo.
+
+Não é necessário instalar Git ou Node.js para usar o instalador. Modelos de IA e o Obsidian são configurados separadamente. O instalador não tem assinatura digital; o Windows pode exibir um aviso do SmartScreen. Confira a origem do download e, se decidir prosseguir, use **Mais informações → Executar assim mesmo**. O release inclui um arquivo `SHA256SUMS.txt` para conferir a integridade do download.
+
+Este download é da adaptação pessoal de João Santos, desenvolvida com Codex a partir do projeto de mochiiwuff. Os releases originais estão [no repositório do autor](https://github.com/mochiiwuff/capri-desktop/releases).
+
 ## Instalar e executar pelo código-fonte
 
 Abra o PowerShell na pasta onde deseja guardar o projeto:
@@ -75,7 +87,7 @@ O resultado fica em `dist/Capri-Setup-0.4.7.exe`, com a versão descompactada em
 2. Execute `Capri-Setup-0.4.7.exe`.
 3. Abra a Capri pelo atalho criado.
 
-A instalação é por usuário. O projeto não configura certificado de assinatura. Para usar um instalador já gerado, não é necessário instalar Node.js. Executáveis não fazem parte do histórico Git: gere-os pelo comando acima. `--publish never` impede publicação automática pelo electron-builder.
+A instalação é por usuário. O projeto não configura certificado de assinatura. Para usar um instalador já gerado, não é necessário instalar Node.js. Os executáveis ficam nos [assets dos releases](https://github.com/Joao-Santos-F/pessoal-project/releases), fora do histórico Git; você também pode gerá-los pelo comando acima. `--publish never` impede publicação automática pelo electron-builder.
 
 ## Configurar a IA
 
