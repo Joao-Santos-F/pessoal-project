@@ -4,7 +4,20 @@ Assistente de desktop para Windows, construída com Electron, com personagem ani
 
 **Esta versão foi programada inteiramente a partir do repositório [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop), utilizando o Codex na implementação das adaptações, revisões, documentação e testes, sob orientação de João Santos.**
 
-**Todos os créditos pela criação do projeto original, sua base de código, conceito e implementação original pertencem a [mochiiwuff](https://github.com/mochiiwuff) e aos respectivos colaboradores.** Esta é uma adaptação pessoal desse trabalho, não uma criação independente do zero. A referência ao Codex descreve as adaptações desta versão; não afirma como o autor original desenvolveu seu projeto.
+**Todos os créditos pela criação do projeto original, sua base de código, conceito e implementação original pertencem a [mochiiwuff](https://github.com/mochiiwuff) e aos respectivos colaboradores.** Esta é uma adaptação pessoal desse trabalho, não uma criação independente do zero.
+
+### Contribuidores e ferramentas de IA
+
+**As adaptações desta versão foram implementadas com IA, por meio do Codex, sob orientação de João Santos.** A autoria e os créditos da base original permanecem preservados.
+
+| Crédito | Participação |
+|---|---|
+| [mochiiwuff / capri-desktop](https://github.com/mochiiwuff/capri-desktop) | Criação do projeto original, conceito e base de código. |
+| [João Santos](https://github.com/Joao-Santos-F) | Orientação das adaptações, definição dos pedidos e manutenção desta versão. |
+| [OpenAI / Codex](https://github.com/openai/codex) | Ferramenta de IA utilizada para implementar as adaptações, revisar código, executar testes, documentar e preparar a publicação. |
+| [Anthropic / Claude Code](https://github.com/anthropics/claude-code) | Ferramenta de IA reconhecida nos créditos e integrada ao projeto original por meio de hooks e chat. |
+
+Veja [CONTRIBUTORS.md](CONTRIBUTORS.md) para os detalhes das atribuições. Os créditos às ferramentas reconhecem suas funções; não indicam participação institucional ou endosso da OpenAI ou da Anthropic.
 
 - Original: <https://github.com/mochiiwuff/capri-desktop>
 - Esta adaptação: <https://github.com/Joao-Santos-F/pessoal-project>
