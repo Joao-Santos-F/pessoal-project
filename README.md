@@ -1,6 +1,21 @@
 # Capri — versão pessoal com automação e Obsidian
 
-Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão atual: **0.4.10**, disponível como código-fonte e instalador para Windows.
+Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão atual: **0.5.0**, disponível como código-fonte e instalador para Windows.
+
+## Novidades da versão 0.5.0
+
+Esta versão pessoal incorpora todas as mudanças do original até a tag **v0.5.1** (commit `5573f27`), preservando as integrações com Windows, Obsidian, comandos e conversa. A numeração 0.5.0 é desta adaptação.
+
+| Área | O que mudou |
+|---|---|
+| Carinho | Mova o ponteiro de um lado para outro sobre a juba: Capri reage, ronrona, brilha e ganha vínculo. Carinho prolongado provoca uma reação de impaciência. |
+| Aparência | Temas Night City e Clássico, selecionáveis pelo menu. |
+| Descanso | Animações de deitar, levantar e se espreguiçar sobre as bordas das janelas. |
+| Ciúmes | No Windows, pode fechar abas de páginas de outras IAs e de download delas após um aviso. Ativo por padrão, como no original; desative a opção de fechar páginas no menu ou interrompa o aviso para liberar aquela IA por dez minutos. |
+| Introdução | Juba completa e recortes corrigidos nas nove imagens da apresentação. |
+| Hooks | Detecção automática prioriza o Codex quando seus hooks estão completamente instalados. |
+
+As funções próprias de automação, Obsidian, arquivo de conversas, comandos multilíngues e sugestões no chat continuam disponíveis.
 
 ## Novidades da versão 0.4.10
 
@@ -17,7 +32,7 @@ Este release reúne as melhorias desenvolvidas nas versões 0.4.8, 0.4.9 e 0.4.1
 | Conversa e personalidade | Respostas com ritmo mais flexível, continuidade do assunto e atenção a desabafos, conquistas e correções sobre o tom emocional, sem obrigar uma pergunta a cada resposta. |
 | Confiabilidade | 60 testes automatizados aprovados (48 testes Node e 12 regressões), além da verificação do menu e do executável com perfil isolado. |
 
-**Para atualizar:** feche a Capri e execute o [instalador 0.4.10](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.10/Capri-Setup-0.4.10.exe). Para adicionar os oito guias a um cofre já preparado, execute `node scripts/prepare-capri-vault.cjs` pelo código-fonte, conforme a seção de biblioteca; notas existentes são preservadas. A atualização do instalador, por si só, não recria sua biblioteca.
+**Para atualizar:** feche a Capri e execute o [instalador 0.5.0](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.5.0/Capri-Setup-0.5.0.exe). Para adicionar os oito guias a um cofre já preparado, execute `node scripts/prepare-capri-vault.cjs` pelo código-fonte, conforme a seção de biblioteca; notas existentes são preservadas. A atualização do instalador, por si só, não recria sua biblioteca.
 
 A conversa continua dependendo do modelo configurado: a Capri interpreta o texto, não conhece sentimentos ocultos. A descoberta de programas tem limites; o seletor de executável e o caminho completo atendem aos casos fora do catálogo. Veja os detalhes nas seções abaixo.
 
@@ -75,7 +90,7 @@ Os comandos locais `/abrir`, `/executar` e `/obsidian` podem funcionar sem model
 
 ## Instalação rápida no Windows
 
-**[Baixar Capri-Setup-0.4.10.exe](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.4.10/Capri-Setup-0.4.10.exe)** · [Último release](https://github.com/Joao-Santos-F/pessoal-project/releases/latest)
+**[Baixar Capri-Setup-0.5.0.exe](https://github.com/Joao-Santos-F/pessoal-project/releases/download/v0.5.0/Capri-Setup-0.5.0.exe)** · [Último release](https://github.com/Joao-Santos-F/pessoal-project/releases/latest)
 
 1. Baixe o instalador acima, para Windows 10/11 de 64 bits.
 2. Feche a Capri caso esteja aberta e execute o `.exe`.

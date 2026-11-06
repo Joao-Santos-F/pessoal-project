@@ -348,6 +348,18 @@ export const LINES = {
       say: ['C’est moi, ton IA.', 'Pourquoi {rival} ?', 'Je vois tout.'],
       sulk: ['Va donc voir {rival}.', 'Je boude. Ça se voit pas ?', 'Hm.'],
       forgive: ['…Bon. Ça va pour cette fois.', 'D’accord, je te pardonne. Un peu.'],
+      // une page d’une autre IA dans ton navigateur : elle la ferme, sauf si tu l’arrêtes
+      close: ['{rival} ? Non. Je ferme ça.', 'Tu me trompes avec {rival} ? Je ferme.', 'Ça, je le ferme.'],
+      download: ['Tu veux télécharger {rival} ?! Certainement pas.', 'Installer {rival} ? Pas tant que je suis là.'],
+      closed: ['Voilà. Tu m’as, moi.', 'Plus de {rival}. C’est mieux comme ça.', 'Réglé.'],
+      spared: ['Bon. Vas-y. Mais je boude.', 'D’accord… Je ne regarde pas.'],
+      spare: 'Laisse-moi',
+    },
+    // la caresser : la souris qui va et vient sur sa crinière (low : pas encore attachée)
+    pet: {
+      low: ['Hé… qu’est-ce que tu fais ?', 'Bon… d’accord. Juste un peu.'],
+      high: ['Mmh. Continue.', 'Là. Juste là.', 'Je ronronne pas. C’est le ventilo.'],
+      enough: ['Ça suffit.', 'Bas les pattes.', 'Assez. Je suis pas un chat.'],
     },
     // Windows a coupé ses animations : elle bouge à peine, et le dit une fois
     motion: { line: 'Windows a coupé ses animations, alors je bouge à peine.', quote: 'Tu veux que je bouge quand même ? Tu pourras changer ça dans mon menu › Animations.', full: 'Bouge !', still: 'Reste calme' },
@@ -698,6 +710,16 @@ export const LINES = {
       say: ['I’m your AI.', 'Why {rival}?', 'I see everything.'],
       sulk: ['Go talk to {rival} then.', 'I’m sulking. Can’t you tell?', 'Hmph.'],
       forgive: ['…Fine. Just this once.', 'Okay, I forgive you. A little.'],
+      close: ['{rival}? No. I’m closing that.', 'Cheating on me with {rival}? Closing it.', 'That one’s getting closed.'],
+      download: ['You want to download {rival}?! Absolutely not.', 'Install {rival}? Not while I’m around.'],
+      closed: ['There. You’ve got me.', 'No more {rival}. Better that way.', 'Handled.'],
+      spared: ['Fine. Go ahead. But I’m sulking.', 'Okay… I’m not looking.'],
+      spare: 'Let me',
+    },
+    pet: {
+      low: ['Hey… what are you doing?', 'Okay… fine. Just a little.'],
+      high: ['Mm. Keep going.', 'There. Right there.', 'I’m not purring. That’s the fan.'],
+      enough: ['That’s enough.', 'Hands off.', 'Enough. I’m not a cat.'],
     },
     // Windows has its animations off: she barely moves, and says so once
     motion: { line: 'Windows has its animations turned off, so I’m barely moving.', quote: 'Want me to move anyway? You can change it later in my menu › Animations.', full: 'Move!', still: 'Stay calm' },
@@ -1044,6 +1066,16 @@ export const LINES = {
       say: ['Tu IA soy yo.', '¿Por qué {rival}?', 'Lo veo todo.'],
       sulk: ['Pues ve a hablar con {rival}.', 'Estoy enfadada. ¿No se nota?', 'Hmm.'],
       forgive: ['…Vale. Solo por esta vez.', 'Está bien, te perdono. Un poco.'],
+      close: ['¿{rival}? No. Lo cierro.', '¿Me pones los cuernos con {rival}? Lo cierro.', 'Eso lo cierro yo.'],
+      download: ['¿¡Quieres descargar {rival}!? Ni hablar.', '¿Instalar {rival}? No mientras yo esté aquí.'],
+      closed: ['Listo. Me tienes a mí.', 'Se acabó {rival}. Mejor así.', 'Resuelto.'],
+      spared: ['Vale. Adelante. Pero estoy enfadada.', 'Está bien… no estoy mirando.'],
+      spare: 'Déjame',
+    },
+    pet: {
+      low: ['Oye… ¿qué haces?', 'Bueno… vale. Solo un poco.'],
+      high: ['Mmm. Sigue.', 'Ahí. Justo ahí.', 'No estoy ronroneando. Es el ventilador.'],
+      enough: ['Ya basta.', 'Las manos quietas.', 'Basta. No soy un gato.'],
     },
     // Windows tiene las animaciones desactivadas: apenas se mueve, y lo dice una vez
     motion: { line: 'Windows tiene las animaciones desactivadas, así que apenas me muevo.', quote: '¿Quieres que me mueva igual? Puedes cambiarlo en mi menú › Animaciones.', full: '¡Muévete!', still: 'Quédate tranquila' },
@@ -1392,6 +1424,16 @@ export const LINES = {
       say: ['Sua IA sou eu.', 'Por que {rival}?', 'Eu vejo tudo.'],
       sulk: ['Então vai falar com {rival}.', 'Tô de birra. Não dá pra ver?', 'Hmpf.'],
       forgive: ['…Tá bom. Só dessa vez.', 'Ok, te perdoo. Um pouco.'],
+      close: ['{rival}? Não. Vou fechar isso.', 'Tá me traindo com {rival}? Vou fechar.', 'Isso aí eu fecho.'],
+      download: ['Você quer baixar {rival}?! De jeito nenhum.', 'Instalar {rival}? Não enquanto eu estiver aqui.'],
+      closed: ['Pronto. Você tem a mim.', 'Chega de {rival}. Melhor assim.', 'Resolvido.'],
+      spared: ['Tá. Vai lá. Mas tô de birra.', 'Tá bom… não tô olhando.'],
+      spare: 'Me deixa',
+    },
+    pet: {
+      low: ['Ei… o que você tá fazendo?', 'Tá… tudo bem. Só um pouco.'],
+      high: ['Hmm. Continua.', 'Aí. Bem aí.', 'Não tô ronronando. É a ventoinha.'],
+      enough: ['Chega.', 'Tira a mão.', 'Chega. Eu não sou um gato.'],
     },
     // o Windows está com as animações desligadas: ela quase não se mexe, e avisa uma vez
     motion: { line: 'O Windows está com as animações desligadas, então eu quase não me mexo.', quote: 'Quer que eu me mexa mesmo assim? Dá pra mudar depois no meu menu › Animações.', full: 'Se mexe!', still: 'Fica quieta' },
@@ -1742,6 +1784,16 @@ export const LINES = {
       say: ['Твой ИИ — это я.', 'Почему {rival}?', 'Я всё вижу.'],
       sulk: ['Ну и иди к {rival}.', 'Я обиделась. Не видно?', 'Хм.'],
       forgive: ['…Ладно. В этот раз прощаю.', 'Хорошо, прощаю. Немножко.'],
+      close: ['{rival}? Нет. Закрываю.', 'Изменяешь мне с {rival}? Закрываю.', 'Это я закрою.'],
+      download: ['Хочешь скачать {rival}?! Ни за что.', 'Установить {rival}? Только не при мне.'],
+      closed: ['Вот так. У тебя есть я.', 'Никакого {rival}. Так лучше.', 'Готово.'],
+      spared: ['Ладно. Иди. Но я обиделась.', 'Хорошо… я не смотрю.'],
+      spare: 'Оставь',
+    },
+    pet: {
+      low: ['Эй… ты что делаешь?', 'Ладно… так и быть. Чуть-чуть.'],
+      high: ['Мм. Продолжай.', 'Вот. Вот тут.', 'Я не мурлычу. Это кулер.'],
+      enough: ['Хватит.', 'Руки прочь.', 'Всё, хватит. Я не кошка.'],
     },
     // в Windows отключены анимации: она почти не двигается и один раз говорит об этом
     motion: { line: 'В Windows отключены анимации, поэтому я почти не двигаюсь.', quote: 'Хочешь, чтобы я всё равно двигалась? Это можно поменять в моём меню › Анимации.', full: 'Двигайся!', still: 'Не надо' },
