@@ -95,7 +95,7 @@ async function chat({ model, messages, json = false }, onDelta, signal) {
       ...(json && { format: 'json' }),
       keep_alive: '15m', // she stays loaded while you chat
       ...(thinks && { think: 'low' }),
-      options: { temperature: json ? 0.1 : 0.85, num_predict: json ? 1800 : thinks ? 1200 : 240 },
+      options: { temperature: json ? 0.1 : 0.85, num_ctx: 32768, num_predict: json ? 1800 : 4096 },
     }),
     signal,
   });

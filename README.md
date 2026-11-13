@@ -1,6 +1,23 @@
 # Capri — versão pessoal com automação e Obsidian
 
-Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão atual: **0.5.0**, disponível como código-fonte e instalador para Windows.
+Assistente de desktop para Windows, construída com Electron, com personagem animada, chat com IA, comandos locais e integração com Obsidian. Versão atual do código-fonte: **0.5.2**.
+
+## Novidades da versão 0.5.2
+
+Integra a tag [v0.5.2 do projeto original](https://github.com/mochiiwuff/capri-desktop/releases/tag/v0.5.2) (commit `c011764`), preservando Obsidian, arquivo de conversas, comandos `/pc`, personalidade e demais personalizações locais.
+
+- Diagnóstico de lentidão e internet, limpeza de temporários e lixeira, downloads grandes, inicialização do Windows, atualizações via winget e fotos duplicadas.
+- Controles de áudio, microfone, Wi-Fi, Bluetooth, USB, brilho, gravação pela Xbox Game Bar e recuperação de janelas fora da tela.
+- Setups para salvar e restaurar aplicativos e posições; modo jogo com restauração do plano de energia e dos aplicativos fechados.
+- Configurações do Windows, bateria, disco, RAM, volume, temporizadores, organização de janelas, temas e energia.
+- Pausas de saúde após duas horas de uso, adiáveis e desativáveis no menu, respeitando jogos e períodos de inatividade.
+- Revisão adicional: remoção de duplicados revalida o conteúdo e preserva arquivos alterados; buscas expiradas exigem nova revisão; falhas de atualização são informadas; botões antigos ou cliques repetidos não reaplicam ações do chat.
+
+Pedidos reconhecidos localmente funcionam sem o modelo de IA. Por exemplo: `por que meu PC está lento?`, `libera espaço`, `atualiza meus aplicativos`, `internet não funciona`, `volume 30` e `timer 10 minutos`. Os botões de confirmação do original continuam presentes para manutenção e energia; comandos explícitos como `/pc` continuam no fluxo pessoal de ferramentas. Recursos de dispositivos dependem do hardware e dos serviços disponíveis no Windows.
+
+Para gerar o instalador desta versão: `npm run dist`. O arquivo será criado em `dist/Capri-Setup-0.5.2.exe`; este texto não implica publicação de um release no GitHub.
+
+Validação da integração: **73 testes automatizados e 13 verificações de regressão**, além da inicialização do executável com perfil isolado. Veja [o relatório da integração](docs/UPSTREAM-0.5.2.md).
 
 ## Novidades da versão 0.5.0
 

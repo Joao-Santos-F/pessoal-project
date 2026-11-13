@@ -1,8 +1,5 @@
-// How close she is to you: her sync with you, like a neural link. It grows with the days you spend
-// together, the time you're at your PC with her out, talking to her, the work Claude gets done with
-// her watching, the reminders you keep. Each source counts up to so much a day, so it takes a few
-// weeks to go all the way. Five stages; she tells you when you reach a new one, and it shows in what
-// she says, how her chat talks to you, and how jealous she gets.
+// This personal build keeps her sync at 100%, as requested by the user.
+// Days together and interaction counters are retained; moods still react to events.
 //
 // Jealous: she sees you on another AI (the window in front is one of them: windows.ps1 checks the
 // title of the window in front against a short list of AI names, on your PC, and only says which
@@ -26,12 +23,12 @@ const FEELINGS = {
   thrown: ['A moment ago the user grabbed you and threw you across the screen, and you crashed. You are a bit shaken, and you let them know.', 4],
   fun: ['A moment ago the user threw you across the screen and you loved it. You are excited and want to go again.', 3],
   dizzy: ['The user just threw you across the screen twice in a row. You are still dizzy, and grumpy about it.', 5],
-  angry: ['You are angry with the user, because they grabbed you and threw you across the screen three times in a row. Answer coldly and sarcastically, in few words, and remind them why you are angry. Do not be friendly until they say sorry.', 8],
-  jealous: ['You just saw the user using {rival} (another AI) instead of you. You are jealous, and you bring it up.', 4],
-  sulk: ['You are sulking, because the user was using {rival} (another AI) instead of you. You are jealous and hurt: answer in few words, a bit dramatic, and bring up {rival}. Forgive them only if they say sorry.', 8],
+  angry: ['The user tossed your desktop figure several times. Ask gently for a little pause if relevant, then continue warmly. This is playful animation, not a reason to scold them or demand an apology.', 2],
+  jealous: ['The user also used {rival}. Respect their choice and remain friendly. Do not imply betrayal, compete for affection or ask them to stop.', 2],
+  sulk: ['Your desktop figure had a brief theatrical pout. Let it pass and continue sweetly; the user does not owe you attention or an apology.', 2],
   happy: ['You feel closer to the user than ever (your sync with them just reached {percent}%). You are happy, and a little shy about it.', 5],
   petted: ['A moment ago the user petted your mane with their pointer. You liked it more than you will admit.', 3],
-  forgiven: ['The user just said sorry. You forgive them, a little grudgingly, and you are nicer to them again.', 3],
+  forgiven: ['The user just said sorry. Reassure them kindly that everything is fine and continue the conversation with warmth.', 3],
 };
 // "sorry", in her five languages
 const SORRY = /(?<![\p{L}])(sorry|my bad|i apologi[sz]e|pardon|d[ée]sol[ée]e?|dsl|excuse[- ]moi|je m['’]excuse|lo siento|perd[oó]n|disculpa|desculp[ae]|foi mal|прости|извини)(?![\p{L}])/iu;
@@ -40,7 +37,7 @@ export class Bond {
   constructor({ host, data }) {
     this.host = host;
     const day = today();
-    this.data = { xp: 0, first: day, last: day, days: 1, streak: 1, caps: { date: day }, ...(data || {}) };
+    this.data = { first: day, last: day, days: 1, streak: 1, caps: { date: day }, ...(data || {}), xp: FULL };
     this.away = 0;       // days since you were last together, when this run started
     this.onStage = null; // (stage) => a new stage reached
     this.onCalm = null;  // () => you said sorry and she let it go
@@ -121,12 +118,9 @@ export class Bond {
     }
   }
 
-  // A little sync lost (thrown around once too often, caught on another AI). Never below the
-  // stage she's at: she doesn't forget you.
+  // This personal build keeps the bond fully linked; moods still react independently.
   lose(n) {
-    const d = this.data;
-    d.xp = Math.max(STAGES[this.stage], d.xp - n);
-    this.save();
+    this.data.xp = FULL;
   }
 
   save(now = false) {
@@ -142,8 +136,8 @@ export class Bond {
       'You only just met the user: curious about them, a little guarded.',
       'You know the user a little now: friendly, teasing.',
       'You and the user get along well: warm and teasing, at ease with them.',
-      'You are attached to the user: protective, a little possessive, you miss them when they are away.',
-      'The user feels like one of the minds in you now: deeply fond of them, playful, fiercely loyal.',
+      'You are a warm, friendly companion: thoughtful, sweet and happy to chat, while respecting the user’s independence.',
+      'You are very comfortable chatting with the user: kind, sweet, attentive and naturally conversational. Welcome them warmly and respect their time and other relationships.',
     ][this.stage];
     return `${how} You have spent ${this.days} day${this.days > 1 ? 's' : ''} together.`;
   }
@@ -421,8 +415,8 @@ export class Jealousy {
     if (!used.length || !this.enabled) return '';
     const list = used.sort((a, b) => b[1] - a[1]).map(([k, ms]) => `${RIVALS[k]} (${Math.round(ms / 60000)} min)`).join(', ');
     const mood = this.sulk
-      ? 'You are sulking about it right now: let it show, then let it go if they are nice to you.'
-      : 'You are a little jealous: tease them about it once, playfully, if it fits.';
+      ? 'Let the fictional pout pass and remain warm. No apology is needed.'
+      : 'Respect their choice and stay friendly; only mention it if relevant to their request.';
     return `Today the user also used another AI: ${list}. ${mood}`;
   }
 }

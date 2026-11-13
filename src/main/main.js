@@ -25,6 +25,7 @@ const llm = require('./llm');
 const ollama = require('./ollama');
 const setup = require('./setup');
 const apps = require('./apps');
+const system = require('./system');
 const launch = require('./launch');
 const files = require('./files');
 const computer = require('./computer');
@@ -78,7 +79,10 @@ function readMemory() {
 }
 function saveMemory(patch) {
   try {
-    fs.writeFileSync(memoryFile(), JSON.stringify({ ...readMemory(), ...patch }));
+    fs.mkdirSync(path.dirname(memoryFile()), { recursive: true });
+    const temporary = memoryFile() + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify({ ...readMemory(), ...patch }));
+    fs.renameSync(temporary, memoryFile());
   } catch (err) {
     console.error('[capri] could not save her memory:', err.message);
   }
@@ -458,6 +462,7 @@ function rebuildTray() {
       click: (item) => updateConfig({ closePages: item.checked }),
     },
     { label: t.pcReact, type: 'checkbox', checked: cfg.pcReact !== false, click: (item) => updateConfig({ pcReact: item.checked }) },
+    { label: t.breaks, type: 'checkbox', checked: cfg.breaks !== false, click: (item) => updateConfig({ breaks: item.checked }) },
     {
       // she asks first (what she'll send where), then turns it on herself
       label: t.lookAuto, type: 'checkbox', checked: Boolean(cfg.watchScreen),
@@ -954,6 +959,18 @@ function registerIpc() {
     return { local: llm.isLocal(cfg.provider, cfg, model), provider, model, consent: screenDestination(cfg) };
   });
   ipcMain.handle('chat:memory', () => readMemory().history || []);
+  ipcMain.handle('chat:new', () => {
+    if (chats.size) throw new Error('Aguarde a resposta terminar.');
+    const previous = readMemory();
+    if (previous.history?.length) {
+      const directory = path.join(app.getPath('userData'), 'chats');
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, `${Date.now()}.json`), JSON.stringify(previous));
+    }
+    fs.writeFileSync(memoryFile(), JSON.stringify({ history: [], claude: null }));
+    llm.resetClaude();
+    return { ok: true };
+  });
   ipcMain.handle('chat:archive', (_e, message) => chatArchive.record(message));
   ipcMain.on('chat:remember', (_e, history) => Array.isArray(history) && saveMemory({ history }));
   ipcMain.on('chat:ollama', () => shell.openExternal(OLLAMA_SITE));
@@ -1027,6 +1044,14 @@ function registerIpc() {
   });
   ipcMain.handle('apps:launch', (_e, item) => launch.launch(item).then(() => ({ ok: true }), (err) => ({ ok: false, error: err.message })));
   ipcMain.handle('apps:media', (_e, action) => launch.media(action));
+  // your PC itself, from her chat: settings, what's left, sound, snip, windows, theme, power, and
+  // taking care of it (what slows it, space, startup, updates, devices, setups, game mode, internet)
+  ipcMain.handle('pc:do', (_e, req) => Promise.resolve(system.act(req, {
+    display: targetDisplay(),
+    progress: (p) => overlay?.webContents.send('pc:progress', p), // what takes a while: in her ticker
+  })).catch(() => null));
+  // how long since you last touched the keyboard or the mouse, in seconds (her health breaks)
+  ipcMain.handle('pc:idle', () => powerMonitor.getSystemIdleTime());
   ipcMain.handle('apps:music', (_e, query) => launch.music(query).catch(() => false));
   ipcMain.handle('apps:site', (_e, address) => launch.site(address).catch(() => false));
   // typing to her: the overlay takes the keyboard while the chat is open, and gives it back after

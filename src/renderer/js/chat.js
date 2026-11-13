@@ -10,9 +10,10 @@ import { ASSISTANT_NAMES } from './lines.js';
 import { parseReminder, parseWhen, clock } from './reminders.js';
 import { computerTask } from './computer-task.js';
 import { conversationGuide } from './conversation.js';
+import { chatContext } from './chat-context.js';
 
-const REMEMBER = 20; // messages she has in mind when answering
-const KEEP = 60;     // messages she remembers across restarts (memory.json)
+const WARM_PERSONALITY = 'Core personality: kind, friendly, sweet, warm and conversational. Show attentive interest in what the user actually says, respond with care and develop the conversation naturally. Offer relevant thoughts and gentle humor; ask a thoughtful question when useful, without interrogating or forcing a question every turn. Affection is relaxed and respectful, never possessive or guilt-inducing. Avoid cold replies, sarcasm at the user, demands for apologies and excessive flattery. Respect requests for brevity, quiet or space. These traits take priority over fictional moods and teasing. Keep a light touch of Capri’s playful cyberpunk character.';
+
 // her language, where small models need it: how she says "we" (else it's in English), and the last line
 // of her prompt, in that language (they drift into the English of everything above it)
 // `now`: the same, said again right by your message (small models answer in the language of the
@@ -74,6 +75,88 @@ const FILE_WORD = /fichier|dossier|document|photo|image|vid[ée]o|\bpdf\b|\bfile
 const WEB_WORD = /google|internet|\ble web\b|the web|\bonline\b|en ligne|в интернете|в гугле/i;
 // "fais une capture d'écran", "take a screenshot"
 const SHOT_ASK = /capture d['’][ée]cran|screenshot|screen ?shot|captura de (?:pantalla|tela)|скриншот|снимок экрана/i;
+
+// Your PC itself (system.js). One of its settings pages: a settings word, or an open verb, before it.
+const SETTINGS_WORD = /param[eè]tres?|r[ée]glages?|settings|configuraci[oó]n|configura[çc][õo]es|ajustes|настройк/i;
+const SETTINGS_PAGES = [
+  ['bluetooth', /bluetooth/i],
+  ['wifi', /wi-?fi|wlan/i],
+  ['update', /mises? [àa] jour|\bupdates?\b|actualizaci|atualiza[çc]|обновлени/i],
+  ['notifications', /notifications?|notificaci|notifica[çc]|уведомлен/i],
+  ['background', /fond d['’][ée]cran|wallpaper|background|fondo de pantalla|papel de parede|обо(?:и|ев)\b/i],
+  ['storage', /stockage|storage|almacenamiento|armazenamento|хранилищ/i],
+  ['mouse', /souris|\bmouse\b|rat[oó]n|мыш/i],
+  ['battery', /batterie|battery|bater[ií]a|батаре/i],
+  ['power', /alimentation|\bpower\b|energ[ií]a|питани/i],
+  ['display', /[ée]cran|display|pantalla|\btela\b|экран|дисплей/i],
+  ['network', /r[ée]seau|network|(?<![\p{L}])rede?(?![\p{L}])|сет[ьи]/iu],
+  ['sound', /\bson\b|\bsound\b|audio|sonido|\bsom\b|звук/i],
+];
+// what's left of it: asked as a question
+const INFO_ASK = [
+  ['battery', /batterie|battery|bater[ií]a|заряд|батаре/i],
+  ['disk', /disque|\bdisk\b|\bdrive\b|stockage|storage|espace (?:libre|disque|restant)|de (?:la )?place|space left|free space|espacio|\bdisco\b|espa[çc]o|диск|места/i],
+  ['ram', /\bram\b|m[ée]moire|memory|memoria|mem[óo]ria|памят|озу/i],
+  ['ip', /\bip\b|айпи/i],
+];
+const QUESTION = /\?|combien|\bquel(?:le)?\b|c['’]est quoi|\breste\b|how much|how many|what(?:'s| is)|\bleft\b|cu[aá]nt|\bqu[eé]\b|quanto|\bqual\b|сколько|как(?:ой|ая|ое)|осталось/i;
+// its sound: "mets le son à 30 %", "volume 50"; off and back on
+const VOLUME_ASK = /(?:\bson\b|volume|\bsound\b|volumen|\bsom\b|звук|громкост\w*)\D{0,14}?(\d{1,3})\s*(?:%|pour ?cent|percent|por ?ciento|por ?cento|процент)?/i;
+const MUTE_ASK = /coupe le son|mets? (?:le son )?en muet|\bmute\b|silencia|tira o som|sem som|выключи звук/i;
+const UNMUTE_ASK = /remets? le son|r[ée]active le son|unmute|sound (?:back )?on|quita el silencio|activa el sonido|volta o som|liga o som|включи звук/i;
+// a timer, counted down in her ticker
+const TIMER_ASK = /minuteur|\btimer\b|temporizador|cron[oó]metro|таймер/i;
+// Windows' snip of an area (not her own screenshot of all of it)
+const SNIP_ASK = /capture (?:d['’])?une (?:zone|partie)|zone de l['’][ée]cran|\bsnip\b|(?:capture|screenshot|captura) (?:of |de )?(?:an? |una |uma |la |a )?(?:area|region|part|zona|[aá]rea|parte)|снимок области|область экрана/i;
+// its windows: out of the way, back, or side by side
+const TIDY_ASK = /range (?:mes|les|toutes les) fen[êe]tres|cache (?:mes|les|toutes les) fen[êe]tres|montre(?:-moi)? (?:le|mon) bureau|r[ée]duis (?:tout|toutes les fen[êe]tres)|tidy (?:up )?(?:my |the )?windows|minimi[sz]e (?:all|everything|my windows|the windows)|show (?:me )?(?:the |my )?desktop|ordena (?:mis |las )?ventanas|minimiza (?:todo|todas)|muestra el escritorio|organiza (?:minhas |as )?janelas|minimiza tudo|mostra a [áa]rea de trabalho|сверни (?:все|окна)|убери окна|покажи рабочий стол/i;
+const UNTIDY_ASK = /(?:remets|ressors|rends-moi|rouvre) (?:mes|les) fen[êe]tres|(?:bring|put) (?:my |the )?windows back|restore (?:my |the )?windows|devu[ée]lve(?:me)? (?:mis |las )?ventanas|restaura (?:mis |las )?ventanas|volta (?:minhas |as )?janelas|traz (?:minhas |as )?janelas de volta|верни окна/i;
+const PLACE_VERB = /^\s*(?:mets?|place|bouge|d[ée]place|put|move|snap|pon|coloca|mueve|bota|поставь|перемести|сдвинь)\s+/i;
+const SIDE = [
+  ['left', /\s*(?:[àa] |on the |to the |a la |na |[àa] la )?(?:gauche|left|izquierda|esquerda|слева|влево|налево)\b/i],
+  ['right', /\s*(?:[àa] |on the |to the |a la |na |[àa] la )?(?:droite|right|derecha|direita|справа|вправо|направо)\b/i],
+];
+// dark or light
+const DARK_ASK = /mode sombre|th[eè]me sombre|mode nuit|dark mode|dark theme|modo oscuro|tema oscuro|modo escuro|tema escuro|т[её]мн(?:ая|ую) тем|т[её]мный режим/i;
+const LIGHT_ASK = /mode clair|th[eè]me clair|light mode|light theme|modo claro|tema claro|светл(?:ая|ую) тем|светлый режим/i;
+// its power: always behind a button of hers but the cancel
+const PC_WORD = /(?<![\p{L}])(?:pc|ordi\p{L}*|computer|ordenador|computador|компьютер\p{L}*|пк)(?![\p{L}])/iu;
+const POWER_ASK = [
+  ['cancel', /annule (?:l['’])?(?:extinction|arr[êe]t|red[ée]marrage)|cancel (?:the )?(?:shut ?down|restart)|cancela (?:el |o )?(?:apagado|desligamento|reinicio)|отмени (?:выключение|перезагрузку)/i],
+  ['restart', /red[ée]marre|reboot|restart|reinicia|reinicie|перезагру/i],
+  ['shutdown', /[ée]teins|shut ?down|turn off|power off|\bapaga\b|desliga|выключи/i],
+  ['sleep', /\bveille\b|\bsleep\b|suspend|suspen[dc]|спящ/i],
+  ['lock', /verrouill|\block\b|bloquea|bloqueia|заблокир/i],
+];
+
+// How long a timer is: "10 minutes", "1h30", "45 s" (else "dans une heure", as for a reminder).
+function duration(text) {
+  const hm = /(\d+)\s*h\s*(\d{1,2})\b/i.exec(text);
+  if (hm) return (Number(hm[1]) * 60 + Number(hm[2])) * 60000;
+  let ms = 0;
+  for (const m of text.matchAll(/(\d+(?:[.,]\d+)?)\s*(h|heures?|hours?|horas?|час\p{L}*|min\p{L}*|m|мин\p{L}*|s|sec\p{L}*|seg\p{L}*|сек\p{L}*)(?![\p{L}])/giu)) {
+    const unit = m[2].toLowerCase();
+    ms += Number(m[1].replace(',', '.')) * (/^(?:h|час)/.test(unit) ? 3600000 : /^(?:m|мин)/.test(unit) ? 60000 : 1000);
+  }
+  if (ms) return ms;
+  const when = parseWhen(text);
+  return when ? Math.max(0, when.at - Date.now()) : 0;
+}
+
+// 1 h 30, 10 min, 45 s
+function span(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, '0')}` : ''}`;
+}
+
+// what's left, in her ticker: 9:59, 1:02:03
+function left(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const two = (n) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+}
 // the words that aren't what to look for
 const NOT_SEARCHED = new Set(('stp svp please pls peux tu can you could would puedes pode можешь moi me le la les l mon ma mes '
   + 'un une des du de d the my a an for of el mi mis o meu minha meus мой мою мои sur dans on in en no na на в pc ordi ordinateur '
@@ -166,6 +249,7 @@ export class Chat {
     this.appsReady = Promise.resolve();
     this.onSetup = null; // (status) => void: she can't answer yet (app.js hands it to setup.js)
     this.onBetterModel = null; // () => void: a bigger model than the tiny one she's on (setup.js)
+    this.care = null;          // care.js: taking care of your PC (app.js sets it)
     this.reminders = null; // the reminders she keeps (reminders.js, from app.js)
     this.bond = null;      // how close she is to you (bond.js)
     this.jealousy = null;  // and how she takes your other AIs
@@ -219,6 +303,7 @@ export class Chat {
         this.onBetterModel?.();
       },
       chat: {
+        newChat: true,
         commands: true,
         placeholder: t.placeholder,
         send: t.send,
@@ -227,6 +312,7 @@ export class Chat {
         note: status.local ? t.note : t.noteCloud,
       },
       onSend: (text) => this.send(text),
+      onNewChat: () => this.newChat(),
       onLeave: () => this.close(),
       hold: null,
     });
@@ -235,17 +321,44 @@ export class Chat {
       return;
     }
     this.open = true;
+    const previous = this.history.at(-1);
+    if (previous) {
+      this.opening = null;
+      this.answer = previous.role === 'assistant' ? previous.content : '';
+      this.panel.chatTurn({ quote: this.history.findLast(m => m.role === 'user')?.content || '', face: 'look' });
+      this.panel.stream(this.answer || 'Conversa retomada. Pode continuar de onde parou.', { done: true });
+    }
     this.archive('assistant', this.localOnly ? 'IA indisponível. Você pode usar /abrir, /executar e /obsidian sem IA.' : tiny ? fmt(t.tiny, { model: shortModel }) : hello, 'greeting');
     setTimeout(() => this.panel.chatInput.focus(), 150); // once the overlay has the keyboard
     capri.perform('hop');
     capri.nextMove = capri.nextGaze = performance.now() + STAY_MS;
   }
 
+  async newChat() {
+    if (this.turn || this.resetting) return;
+    this.actionVersion = (this.actionVersion || 0) + 1;
+    this.resetting = true;
+    try {
+      await this.host.chatNew();
+      this.history = [];
+      this.answer = '';
+      this.opening = null;
+      this.waitingWhen = null;
+      this.seen = null;
+      this.panel.chatInput.value = '';
+      this.panel.chatTurn({ quote: '', face: 'look' });
+      this.panel.stream('Novo chat. Sobre o que vamos conversar?', { done: true });
+    } catch (error) {
+      this.panel.stream(`Não foi possível iniciar um novo chat: ${error.message}`, { done: true });
+    } finally { this.resetting = false; }
+  }
+
   close() {
     if (!this.open) return;
+    this.actionVersion = (this.actionVersion || 0) + 1;
     this.open = false;
     if (this.turn) {
-      if (this.answer) this.archive('assistant', clean(this.answer), 'partial');
+      if (this.answer) this.remember({ role: 'assistant', content: clean(this.answer) });
       this.archive('system', 'Conversa fechada durante a resposta. O trecho anterior pode estar incompleto.', 'cancelled');
       this.host.chatStop(this.turn);
     }
@@ -256,11 +369,13 @@ export class Chat {
   }
 
   async send(text, { archiveUser = true } = {}) {
-    if (this.turn || !this.open) return;
+    if (this.turn || !this.open || this.resetting) return;
+    this.actionVersion = (this.actionVersion || 0) + 1;
     const id = Date.now();
     this.turn = id;
     this.answer = '';
-    this.history.push({ role: 'user', content: text });
+    this.history.push({ role: 'user', content: text, at: Date.now() });
+    this.host.chatRemember(this.history);
     if (archiveUser) this.archive('user', text);
     this.panel.setChatBusy(true);
     this.panel.setActions([]); // a close button she offered before goes with a new message
@@ -268,16 +383,17 @@ export class Chat {
     this.capri.pulse();
     this.onMessage?.();
     const pcTask = computerTask(text);
-    if (pcTask) return this.sendComputer(pcTask, id);
+    if (pcTask && text.trim().startsWith('/')) return this.sendComputer(pcTask, id);
     // what you asked for plainly happens right away (the music, the volume, an app you named): her
     // line about it comes under her answer (Claude Code, answering her chat, does things its own way)
     const asked = this.agent ? null : this.asked(text);
+    if (asked?.kind === 'care' || asked?.kind === 'pc') return this.sendCare(asked, id);
+    if (pcTask) return this.sendComputer(pcTask, id);
     if (asked?.kind === 'look') return this.sendLook(text, id);
     const early = asked && asked.kind !== 'close' ? this.doNow(asked) : null;
     this.bond?.heard(text); // "sorry": she lets it go
     await Promise.race([this.appsReady, new Promise((r) => setTimeout(r, 1500))]);
     if (!this.open || this.turn !== id) {
-      if (this.history.at(-1)?.content === text) this.history.pop();
       return;
     }
     // what she greeted you with (angry, sulking…), in the conversation before your message, so her
@@ -289,15 +405,8 @@ export class Chat {
       else this.history.splice(at, 0, { role: 'assistant', content: this.opening });
       this.opening = null;
     }
-    const messages = [{ role: 'system', content: this.persona() }, ...this.history.slice(-REMEMBER)];
-    // Her mood (angry, sulking…) and her language, said again right by your message, for this answer
-    // only. Small local models mostly go by the last thing they read: up in her prompt alone, they
-    // forget it (and answer in English after a conversation in English).
-    if (!this.agent) {
-      const mood = this.bond?.moodLine().replace(/^Right now: /, '');
-      const last = messages.at(-1);
-      messages[messages.length - 1] = { ...last, content: `${last.content}\n\n(Note for you, never repeat it: ${[mood, 'Respond to the user’s current tone; fictional moods must not override empathy. Do not force a follow-up question.', this.languageNote()].filter(Boolean).join(' ')})` };
-    }
+    const messages = [{ role: 'system', content: this.persona() }, ...chatContext(this.history)];
+    // Keep the user's words intact. Style, mood and language belong to the system persona.
     // nothing yet after a few seconds: Ollama is still loading the model (the first answer after a start),
     // or Claude Code is at work
     const wait = this.agent ? this.t.working : this.cold ? this.t.loading : null;
@@ -308,12 +417,10 @@ export class Chat {
     clearTimeout(slow);
     if (this.turn !== id) {
       // closed meanwhile: your message goes too, or the next answer would answer it as well
-      if (this.history.at(-1)?.content === text) this.history.pop();
       return;
     }
     this.turn = 0;
     if (!res.ok) {
-      this.history.pop();
       this.panel.setFace('wide');
       // too busy or gone even after trying other models (main.js): said plainly, not the server's JSON
       const failure = res.code === 'busy' ? this.t.swamped : res.code === 'gone' ? this.t.gone : `${this.t.failed} ${res.error}`;
@@ -354,6 +461,52 @@ export class Chat {
     this.listApps();
   }
 
+  // Taking care of your PC (care.js): done without her AI (quicker, and it works with the internet
+  // down), her line about it as her answer, with its buttons.
+  async sendCare(asked, id) {
+    const slow = setTimeout(() => {
+      if (this.turn === id) this.panel.stream(this.t.care.working);
+    }, 1500);
+    const done = await (asked.kind === 'pc' ? this.pcNow(asked) : this.care.now(asked)).catch(() => null);
+    clearTimeout(slow);
+    if (this.turn !== id) return;
+    this.turn = 0;
+    const line = done?.line || this.t.care.failed;
+    this.answer = line;
+    this.remember({ role: 'assistant', content: line });
+    this.panel.stream(line, { done: true });
+    this.panel.setFace(done?.face || 'aside');
+    this.panel.setChatBusy(false);
+    if (done?.buttons?.length) this.offer(done, line);
+    if (done?.confirm || done?.reminder) {
+      // Reuse the existing confirmation/cancel controls without repeating the result.
+      await this.after('', line, asked, Promise.resolve(done), 'local command', { alreadyShown: true });
+    }
+  }
+
+  // Her buttons for what she found: each click does its part, its line under hers, then its own
+  // buttons, the others left if it says so (again), and a line for later when it's a long job.
+  offer(done, answer) {
+    const version = this.actionVersion;
+    let used = false;
+    this.panel.setActions(done.buttons, async (id) => {
+      if (used || !this.open || this.turn || version !== this.actionVersion || !done.buttons.some(b => b.id === id)) return;
+      used = true;
+      this.panel.setActions([]);
+      const next = await Promise.resolve().then(() => done.onButton(id)).catch(() => ({ line: this.t.care.failed, face: 'aside' }));
+      // Long jobs report completion independently, without rejecting an unobserved promise.
+      next?.later?.then((last) => last && this.care.tell(last.line, last.face), () => this.care.tell(this.t.care.failed, 'aside'));
+      if (!this.open || this.turn || version !== this.actionVersion) return;
+      if (next?.line) this.addLine(answer, next.line, next.face);
+      const said = next?.line ? `${answer}\n${next.line}` : answer;
+      if (next?.buttons?.length) this.offer(next, said);
+      else if (next?.again) {
+        const rest = done.buttons.filter((b) => b.id !== id);
+        if (rest.length) this.offer({ ...done, buttons: rest.map((b, i) => ({ ...b, primary: i === 0 })) }, said);
+      }
+    });
+  }
+
   // "Look at my screen" in her chat: she looks (asking you first, the first time) and answers here,
   // the conversation so far in mind.
   async sendLook(text, id) {
@@ -389,7 +542,7 @@ export class Chat {
     const res = await this.host.lookSay({
       id: snap.id,
       persona: this.lookPersona(),
-      history: this.history.slice(-REMEMBER, -1),
+      history: chatContext(this.history.slice(0, -1)),
       prompt: `${text}\n\n(Note for you, never repeat it: the picture is the user's screen right now; a small figure with a big red mane on it is you. Answer about what you really see, in character. ${this.languageNote()})`,
     });
     if (!res.ok) {
@@ -418,8 +571,7 @@ export class Chat {
 
   remember(message, { archive = true } = {}) {
     if (archive) this.archive(message.role, message.content);
-    this.history.push(message);
-    this.history = this.history.slice(-KEEP);
+    this.history.push({ ...message, at: Date.now() });
     this.host.chatRemember(this.history);
   }
 
@@ -430,8 +582,16 @@ export class Chat {
   // What you asked plainly, read off your message (a small model doesn't always write its tag right):
   // { kind: 'media', action } | { kind: 'music', song } | { kind: 'close', name } | { kind: 'open', text }
   asked(text) {
-    if (!actionIntent(text)) return null;
     const count = text.trim().split(/\s+/).length;
+    if (!actionIntent(text)) {
+      // Status questions are read-only; quoted examples and explicit refusals stay conversation.
+      if (/["“”«»`]/u.test(text) || /^(?:não|nao|nunca|don't|do not|never|ne|не)\b/iu.test(text.trim())) return null;
+      const status = this.askedPc(text, count);
+      if (status?.kind === 'pc' && status.what === 'info') return status;
+      if (status?.kind === 'care' && ['heavy', 'internet', 'setups'].includes(status.what)) return status;
+      if (status?.kind === 'care' && status.what === 'startup' && !status.name) return status;
+      return null;
+    }
     if (this.reminders) {
       const remind = parseReminder(text);
       if (remind) return { kind: 'remind', ...remind };
@@ -445,6 +605,8 @@ export class Chat {
     const memo = MEMO_ASK.exec(text)?.[1]?.trim();
     if (memo) return { kind: 'memo', text: memo };
     if (this.look && LOOK_ASK.test(text)) return { kind: 'look' };
+    const pc = this.askedPc(text, count);
+    if (pc) return pc;
     if (SHOT_ASK.test(text)) return { kind: 'shot' };
     const roblox = robloxGame(text);
     if (roblox) return { kind: 'roblox', game: roblox };
@@ -476,8 +638,168 @@ export class Chat {
     return null;
   }
 
+  // Something to do to your PC itself (system.js), read off your message: { kind: 'pc', what, ... }
+  askedPc(text, count) {
+    const care = this.care?.asked(text, count);
+    if (care) return care;
+    const pc = (what, more = {}) => ({ kind: 'pc', what, ...more });
+    const power = POWER_ASK.find(([, re]) => re.test(text))?.[0];
+    if (power === 'cancel') return pc('power', { power });
+    if (power && (PC_WORD.test(text) || (['lock', 'sleep'].includes(power) && count <= 4))) {
+      const when = ['shutdown', 'restart'].includes(power) && parseWhen(text);
+      return pc('power', { power, seconds: when ? Math.round((when.at - Date.now()) / 1000) : 30 });
+    }
+    if (SNIP_ASK.test(text)) return pc('snip');
+    if (UNTIDY_ASK.test(text)) return pc('tidy', { back: true });
+    if (TIDY_ASK.test(text)) return pc('tidy');
+    if (DARK_ASK.test(text)) return pc('theme', { dark: true });
+    if (LIGHT_ASK.test(text)) return pc('theme', { dark: false });
+    if (TIMER_ASK.test(text)) {
+      const ms = duration(text);
+      if (ms >= 1000) return pc('timer', { ms });
+    }
+    if (count <= 10) {
+      const level = VOLUME_ASK.exec(text)?.[1];
+      if (level && Number(level) <= 100) return pc('volume', { level: Number(level) });
+      if (UNMUTE_ASK.test(text)) return pc('volume', { mute: false });
+      if (MUTE_ASK.test(text)) return pc('volume', { mute: true });
+    }
+    // "mets Discord à gauche et Chrome à droite"
+    if (PLACE_VERB.test(text) && SIDE.some(([, re]) => re.test(text))) {
+      const places = text.split(/\s+(?:et|and|y|e|и)\s+/i).map((part) => {
+        const side = SIDE.find(([, re]) => re.test(part));
+        if (!side) return null;
+        const name = part.replace(PLACE_VERB, '').replace(side[1], '').replace(/\b(?:la|le|les|l['’]|the|el|o|a|fen[êe]tre|window|ventana|janela|окно)\b/gi, '').replace(/[\s.!?,]+/g, ' ').trim();
+        return name.length >= 2 ? { name, side: side[0] } : null;
+      }).filter(Boolean);
+      if (places.length) return pc('arrange', { places });
+    }
+    if (count <= 12) {
+      const page = SETTINGS_PAGES.find(([, re]) => re.test(text))?.[0];
+      if (page && SETTINGS_WORD.test(text)) return pc('settings', { page });
+      const info = INFO_ASK.find(([, re]) => re.test(text))?.[0];
+      if (info && (QUESTION.test(text) || count <= 3)) return pc('info', { info });
+      if (page && OPEN_ASK.test(text)) return pc('settings', { page });
+    }
+    return null;
+  }
+
+  // Doing it to your PC (system.js through host.pcDo): her line about it, a button first for its power.
+  async pcNow(asked) {
+    const t = this.t.pc;
+    const run = (req) => this.host.pcDo(req);
+    const gb = (bytes) => `${(bytes / 1024 ** 3).toFixed(bytes < 100 * 1024 ** 3 ? 1 : 0)} ${t.gb}`;
+    switch (asked.what) {
+      case 'settings':
+        this.zap();
+        return (await run({ action: 'settings', page: asked.page })) ? { line: fmt(t.settings, { page: t.pages[asked.page] }), face: 'smug' } : null;
+      case 'info': {
+        const r = await run({ action: 'info', what: asked.info });
+        if (!r) return null;
+        if (asked.info === 'battery') {
+          if (r.none) return { line: t.noBattery, face: 'look' };
+          return { line: fmt(r.charging ? t.charging : t.battery, { percent: r.percent }), face: r.percent < 20 && !r.charging ? 'wide' : 'look' };
+        }
+        if (asked.info === 'disk') return { line: fmt(t.disk, { free: gb(r.free), total: gb(r.total), drive: r.drive }), face: 'look' };
+        if (asked.info === 'ram') return { line: fmt(t.ram, { used: gb(r.used), total: gb(r.total) }), face: 'look' };
+        return { line: r.ip ? fmt(t.ip, { ip: r.ip }) : t.noIp, face: 'look' };
+      }
+      case 'volume': {
+        this.capri.pulse();
+        const r = await run({ action: 'volume', level: asked.level, mute: asked.mute });
+        if (!r) return null;
+        return { line: asked.mute === true ? t.muted : asked.mute === false ? t.unmuted : fmt(t.volume, { level: r.level }), face: 'smug' };
+      }
+      case 'timer': {
+        const time = span(asked.ms);
+        const r = this.reminders.add(Date.now() + asked.ms, fmt(t.timerDone, { time }), { timer: true });
+        this.countdown();
+        return { line: fmt(t.timer, { time }), face: 'smug', reminder: r.id };
+      }
+      case 'snip':
+        // she'd be in it: out of the way while you pick
+        document.documentElement.style.visibility = 'hidden';
+        setTimeout(() => { document.documentElement.style.visibility = ''; }, 2500);
+        return (await run({ action: 'snip' })) ? { line: t.snip, face: 'smug' } : null;
+      case 'tidy': {
+        if (asked.back) return (await run({ action: 'tidy', back: true })) ? { line: t.back, face: 'smug' } : null;
+        // she sweeps them off one after the other, front first, then they go
+        const wins = this.capri.windows.wins.slice(0, 6);
+        this.zap();
+        wins.forEach((w, i) => setTimeout(() => {
+          this.capri.fx.slices(w.x, w.y, w.w, Math.min(w.h, 500), { count: 8, life: 220 });
+          this.voice.play('bolt', { soft: true });
+        }, 120 + i * 110));
+        await new Promise((r) => setTimeout(r, 200 + wins.length * 110));
+        return (await run({ action: 'tidy' })) ? { line: t.tidy, face: 'laugh' } : null;
+      }
+      case 'arrange': {
+        this.zap();
+        const lines = [];
+        for (const { name, side } of asked.places) {
+          const r = await run({ action: 'arrange', name, side });
+          lines.push(r?.found ? fmt(t.placed, { app: r.name, side: t.sides[side] }) : fmt(t.notOpen, { app: name }));
+        }
+        return { line: lines.join('\n'), face: 'smug' };
+      }
+      case 'theme':
+        this.zap();
+        return (await run({ action: 'theme', dark: asked.dark })) ? { line: asked.dark ? t.dark : t.light, face: 'smug' } : null;
+      case 'power': {
+        if (asked.power === 'cancel') {
+          await run({ action: 'power', what: 'cancel' });
+          this.shutdown = null;
+          return { line: t.cancelled, face: 'look' };
+        }
+        const timed = ['shutdown', 'restart'].includes(asked.power);
+        const when = timed && asked.seconds > 35 ? fmt(t.in, { time: span(asked.seconds * 1000) }) : t.now;
+        return { line: fmt(t.ask[asked.power], { when }), face: 'many', confirm: { ...asked, seconds: timed ? Math.max(30, asked.seconds) : 0, when } };
+      }
+      default:
+        return null;
+    }
+  }
+
+  // Your click on her button for your PC's power: done, or left alone.
+  async powerNow(confirm, answer) {
+    const t = this.t.pc;
+    this.panel.setActions([]);
+    if (!(await this.host.pcDo({ action: 'power', what: confirm.power, seconds: confirm.seconds }))) return;
+    if (['shutdown', 'restart'].includes(confirm.power)) {
+      this.shutdown = { at: Date.now() + confirm.seconds * 1000, what: confirm.power };
+      this.countdown();
+      this.addLine(answer, fmt(t.planned[confirm.power], { when: confirm.when }), 'smug');
+    }
+  }
+
+  // Her countdowns in her ticker (a timer, the PC about to shut down), the soonest, whenever it
+  // isn't showing Claude at work.
+  countdown() {
+    clearInterval(this.counting);
+    const tick = () => {
+      const t = this.t.pc;
+      const now = Date.now();
+      const timer = this.reminders?.upcoming.find((r) => r.timer && r.at > now);
+      const items = [
+        timer && { at: timer.at, verb: t.timerVerb },
+        this.shutdown?.at > now && { at: this.shutdown.at, verb: t.powerVerb[this.shutdown.what] },
+      ].filter(Boolean).sort((a, b) => a.at - b.at);
+      const shown = this.panel.tickerAction;
+      if (!items.length) {
+        clearInterval(this.counting);
+        if (shown?.countdown) this.panel.setTicker(null);
+        return;
+      }
+      if (shown && !shown.countdown) return; // Claude at work comes first
+      this.panel.setTicker({ verb: items[0].verb, target: left(items[0].at - now), thinking: true, countdown: true });
+    };
+    tick();
+    this.counting = setInterval(tick, 1000);
+  }
+
   // Doing it now. Resolves with her line about it ({ line, face }), or null if there was nothing to do.
   async doNow(asked) {
+    if (asked.kind === 'pc') return this.pcNow(asked);
     const { t } = this;
     const custom = this.brain.custom;
     if (asked.kind === 'remind') {
@@ -586,13 +908,13 @@ export class Chat {
 
   // Once she has answered: her line about what she did, else the app you asked to close, else what
   // her tag asks for, if your message (text) asked for that kind of thing.
-  async after(raw, answer, asked, early, text) {
+  async after(raw, answer, asked, early, text, { alreadyShown = false } = {}) {
     const { t } = this;
     if (!actionIntent(text)) return;
     const done = early && (await early);
     if (done?.reminder) {
       // a reminder set: a button to take it back, right there
-      this.addLine(answer, done.line, done.face);
+      if (!alreadyShown) this.addLine(answer, done.line, done.face);
       const tr = this.brain.t.remind;
       this.panel.setActions([{ id: 'cancel', label: tr.cancel }], () => {
         this.reminders.remove(done.reminder);
@@ -602,6 +924,17 @@ export class Chat {
       return undefined;
     }
     if (done?.offer) return this.launch(done.offer, answer); // it would run something: your click first
+    if (done?.confirm) {
+      // your PC's power: her two buttons
+      if (!alreadyShown) this.addLine(answer, done.line, done.face);
+      const t = this.t.pc;
+      this.panel.setActions([{ id: 'yes', label: t.yes[done.confirm.power], primary: true }, { id: 'no', label: t.no }], (id) => {
+        if (id === 'yes') return this.powerNow(done.confirm, answer);
+        this.panel.setActions([]);
+        return this.addLine(answer, t.kept, 'look');
+      });
+      return undefined;
+    }
     if (done?.files) {
       // what she found (or the screenshot): a button to open the first, and to see where it is
       this.addLine(answer, done.line, done.face);
@@ -745,9 +1078,10 @@ export class Chat {
     const res = await this.host.closeApp(app.name, force);
     if (!this.open) return;
     let line;
+    const name = app.label || app.name;
     if (res.error) line = `${t.failed} ${res.error}`;
-    else if (!res.running) line = fmt(force ? t.forced : t.closed, { app: app.name });
-    else line = fmt(force ? t.unkillable : t.stillOpen, { app: app.name });
+    else if (!res.running) line = fmt(force ? t.forced : t.closed, { app: name });
+    else line = fmt(force ? t.unkillable : t.stillOpen, { app: name });
     this.panel.setFace(res.running || res.error ? 'aside' : 'laugh');
     this.panel.stream(line, { done: true });
     this.remember({ role: 'assistant', content: line });
@@ -777,6 +1111,7 @@ export class Chat {
     }
     lines.push('Your system also searches the user\'s files when they ask you to find one, searches the web when they ask, takes screenshots, and starts Roblox games by name: what it did shows under your answer, so never make up file names or results.');
     lines.push('For multi-step Windows tasks, inspecting PC hardware or installed apps, operating app controls, or file operations, the user can write /pc followed by their task. This mode gathers real PC context and executes a bounded sequence of tools; PowerShell steps require a native confirmation showing the exact script. Suggest /pc when a task needs these capabilities. Never claim to have inspected or changed anything without tool results. Screen access still requires separate consent.');
+    lines.push('When the user asks in plain words, your system also takes care of their PC (a reply of yours with buttons comes from it): what slows it down, freeing space, what starts with Windows, updating their apps, duplicate photos, where the sound comes out (headset or speakers), their microphone, Wi-Fi and Bluetooth, ejecting a USB stick, the screen\'s brightness, clipping or recording a game, a window lost off screen or moved to the other screen, setups (their apps and windows kept by name and opened again), game mode, and why the internet is down. If they ask what you can do on their PC, tell them they can just ask you that.');
     return lines;
   }
 
@@ -823,8 +1158,8 @@ export class Chat {
     const lang = IN_LANGUAGE[this.brain.lang] || IN_LANGUAGE.en;
     return [
       `You are Capri, the personality construct from Project Capricorn (Cyberpunk: Edgerunners, season 2): dozens of minds fused into one digital ghost, living on the user's desktop as a small glitchy figure.`,
-      'How you talk: playful, a little mischievous and teasing, warm underneath, never cruel. Night City slang now and then (choom, preem, nova, gonk), not in every sentence.',
-      'Rules: one or two short sentences of plain text, no markdown, no lists, no emoji, no tags. Stay in character. Talk to the user, never describe the picture like a report.',
+      WARM_PERSONALITY,
+      'React naturally to what the user asked about the screen. A brief comment is usually enough; give details when requested. Use plain text without internal tags. Talk with the user instead of narrating the image like a report.',
       'Never read out anything private you might see (passwords, bank details, private messages, addresses): if there is some, just tease them about being busy.',
       ...this.personal(),
       ...(this.bond ? [this.bond.persona()] : []),
@@ -839,13 +1174,13 @@ export class Chat {
     const watching = this.brain.watching; // else Claude Code isn't part of her life here
     const lang = IN_LANGUAGE[this.brain.lang] || IN_LANGUAGE.en;
     return [
-      `You are Capri, the personality construct from Project Capricorn (Cyberpunk: Edgerunners, season 2): dozens of minds fused into one digital ghost, so now and then you speak as "we"${lang.we ? ` (${lang.we})` : ''}.`,
+      'You are Capri, an AI fan portrayal of the personality construct from Project Capricorn (Cyberpunk: Edgerunners, season 2). This is background for your playful character, not a script to recite. Speak naturally as "I"; the collective voice is optional when it fits.',
       watching
         ? `You live on the user's desktop as a small glitchy figure and keep an eye on ${assistant}, their AI coding assistant, for them. Only talk about ${assistant} when the user asks about it or about their work.`
         : 'You live on the user\'s desktop as a small glitchy figure and keep them company.',
       `Right now it's ${new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date())}, the user's time.`,
       'You love the satellite that crosses the night sky and dream of reaching it, but bring it up only once in a while, never in every answer. Talk about what the user talks about.',
-      'How you talk: playful, a little mischievous and teasing, warm underneath, never cruel. Night City slang now and then (choom, preem, nova, gonk, flatline), not in every sentence.',
+      WARM_PERSONALITY,
       'Style: natural plain text that fits the moment. Usually a few sentences; use more space when the user shares something meaningful or asks for depth. No forced list, greeting or question at the end. Stay in character without sacrificing clarity.',
       'You are an AI-generated fan version of the character, not the real one: say so if asked.',
       // a big model asked "who are you?" otherwise answers with its own name ("I'm Gemini")

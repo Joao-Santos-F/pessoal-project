@@ -34,13 +34,17 @@ const DEFAULTS = {
   motionAsked: false, // she asked once, Windows' animations being off, whether to move anyway
   render: 'auto',   // how her window is drawn: 'auto', 'gl' (OpenGL) or 'software' (no graphics card), for PCs that show it black
   follow: true,      // with several screens, she follows the pointer to the one you're on
-  jealous: true,     // she gets jealous when she sees you on another AI (bond.js)
-  closePages: true,  // jealous, she closes their pages in your browser, and pages to download them
+  jealous: false,    // optional theatrical jealousy; the default personality is warm
+  closePages: false, // do not close other AI pages by default
   reminders: [],     // the reminders she keeps: [{ id, at, text, made }] (reminders.js)
   bond: null,        // how close she is to you: { xp, first, last, days, streak, caps } (bond.js)
   pcReact: true,     // she reacts to your PC: the processor at full tilt, the battery, the network, a USB stick, a game (pc.js)
   watchScreen: false, // she looks at your screen now and then and says something about it (look.js)
   lookAsked: false,  // she told you what looking means (where the picture goes) and you said yes
+  breaks: true,      // after two hours at your PC without a real break, she tells you to take one (breaks.js)
+  setups: {},        // your setups, by name: the apps you had open and where (setups.js)
+  gameClose: [],     // the apps game mode closes, as you named them
+  gameMode: null,    // game mode on: { plan, closed, since }, to put everything back after
 };
 
 let cache = null;
@@ -56,11 +60,19 @@ function load(fresh = false) {
   } catch {
     cache = { ...DEFAULTS };
   }
+  cache.bond = { ...(cache.bond || {}), xp: 1000 };
+  // Apply the requested friendly defaults to existing installations once.
+  if (!cache.warmPersonalityVersion) {
+    cache.jealous = false;
+    cache.closePages = false;
+    cache.warmPersonalityVersion = 1;
+  }
   return cache;
 }
 
 function save(patch) {
   cache = { ...load(), ...patch };
+  cache.bond = { ...(cache.bond || {}), xp: 1000 };
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true });
     fs.writeFileSync(file(), JSON.stringify(cache, null, 2));

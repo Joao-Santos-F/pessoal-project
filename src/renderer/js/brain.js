@@ -362,6 +362,12 @@ export class Brain {
     let line = pick(this.t.idle);
     if (mine.length && Math.random() < 0.5) line = pick(mine);
     else if (close.length && Math.random() < 0.4) line = pick(close);
+    const recent = this.recentIdleLines || [];
+    if (recent.includes(line)) {
+      const alternatives = [...mine, ...this.t.idle, ...close].filter(value => !recent.includes(value));
+      if (alternatives.length) line = pick(alternatives);
+    }
+    this.recentIdleLines = [...recent, line].slice(-3);
     return fmt(line, { name: this.custom.userName || 'choom' });
   }
 

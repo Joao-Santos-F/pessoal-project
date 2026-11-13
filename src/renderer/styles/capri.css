@@ -827,6 +827,10 @@ html[data-motion='reduced'] .panel__bar {
   flex: none;
 }
 
+.panel__chat:has(.panel__new-chat:not([hidden])) { flex-wrap: wrap; }
+.panel__chat:has(.panel__new-chat:not([hidden])) .panel__input { flex-basis: 100%; }
+.panel__new-chat[hidden] { display: none; }
+
 .panel__chat .panel__action:disabled {
   --btn: var(--paper-3);
   --notch: var(--paper-3);

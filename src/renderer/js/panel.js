@@ -64,6 +64,8 @@ export class Panel {
     this.chatInput = panel.querySelector('.panel__input');
     this.chatSend = panel.querySelector('.panel__send');
     this.chatClose = panel.querySelector('.panel__close');
+    this.chatNew = panel.querySelector('.panel__new-chat');
+    this.chatNew.addEventListener('click', () => this.current?.onNewChat?.());
     this.commandMenu = new CommandMenu(this.chatInput, this.chatForm);
     this.note = panel.querySelector('.panel__note');
     this.chatForm.addEventListener('click', (e) => e.stopPropagation());
@@ -278,6 +280,8 @@ export class Panel {
   }
 
   renderChat(chat) {
+    this.chatNew.hidden = !chat?.newChat;
+    this.chatNew.disabled = false;
     this.commandMenu.enabled = !!chat?.commands;
     this.commandMenu.close();
     this.el.classList.toggle('is-chat', Boolean(chat));
@@ -376,6 +380,7 @@ export class Panel {
     if (busy) this.commandMenu.close();
     this.chatInput.disabled = busy;
     this.chatSend.disabled = busy;
+    this.chatNew.disabled = busy;
     if (!busy && this.current?.chat) this.chatInput.focus();
   }
 

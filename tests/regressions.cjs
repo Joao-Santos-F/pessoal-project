@@ -100,17 +100,37 @@ async function main() {
   });
   await probe('R04: closing chat before discovery prevents request', async () => {
     const c = chat();
-    let ready, sends = 0, stops = 0;
+    let ready, saved, sends = 0, stops = 0;
     Object.assign(c, { open: true, turn: 0, history: [], agent: true,
       appsReady: new Promise((resolve) => { ready = resolve; }),
       panel: { setChatBusy: noop, setActions: noop, chatTurn: noop }, persona: () => 'persona',
     });
-    c.host = { chatStop: () => { stops++; }, focusOverlay: noop,
+    c.host = { chatStop: () => { stops++; }, focusOverlay: noop, chatRemember: history => { saved = structuredClone(history); },
       chatSend: async () => { sends++; return { ok: true, text: 'response' }; } };
     const pending = c.send('hello');
     c.close(); ready(); await pending;
     assert.equal(stops, 1); assert.equal(sends, 0); assert.equal(c.open, false);
+    assert.equal(saved[0].content, 'hello');
+    assert.equal(c.history[0].content, 'hello');
     return { stopBeforeSend: stops, requestsAfterClose: sends };
+  });
+  await probe('R04b: new chat clears context only after storage succeeds and never during a reply', async () => {
+    const c = chat();
+    let resets = 0;
+    Object.assign(c, { turn: 1, history: [{ role: 'user', content: 'old' }],
+      panel: { chatInput: { value: 'draft' }, chatTurn: noop, stream: noop },
+      host: { chatNew: async () => { resets++; } } });
+    await c.newChat();
+    assert.equal(resets, 0);
+    c.turn = 0;
+    c.host.chatNew = async () => { throw Error('disk'); };
+    await c.newChat();
+    assert.equal(c.history[0].content, 'old');
+    c.host.chatNew = async () => { resets++; };
+    await c.newChat();
+    assert.equal(resets, 1);
+    assert.equal(c.history.length, 0);
+    assert.equal(c.panel.chatInput.value, '');
   });
   await probe('R05: expired intro resolves its promise', async () => {
     const { FxLayer } = await esm('src/renderer/js/fx.js');
